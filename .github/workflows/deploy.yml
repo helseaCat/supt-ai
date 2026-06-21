@@ -1,0 +1,33 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'cdk/**'
+      - 'docker/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # TODO: Configure environment protection rules
+    # environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+        working-directory: cdk
+
+      - name: CDK Deploy
+        run: npx cdk deploy --require-approval never
+        working-directory: cdk
+        # env:
+        #   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        #   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        #   AWS_REGION: ${{ vars.AWS_REGION }}

@@ -1,0 +1,33 @@
+{
+  "name": "supt-ai-cdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Infrastructure as Code for Supt-AI (PR-Agent + Bedrock reviewer)",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "test": "jest",
+    "cdk": "cdk",
+    "deploy": "cdk deploy",
+    "synth": "cdk synth",
+    "diff": "cdk diff",
+    "lint": "eslint . --ext .ts"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^22.5.0",
+    "aws-cdk": "^2.150.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.2",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0",
+    "source-map-support": "^0.5.21"
+  }
+}

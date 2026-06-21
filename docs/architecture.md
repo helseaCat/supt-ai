@@ -1,0 +1,3 @@
+# Architecture
+
+> TODO: Add architecture diagrams and system design documentation.

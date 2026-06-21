@@ -1,0 +1,2 @@
+# Python dependencies for the Lambda container
+# Add packages here as needed

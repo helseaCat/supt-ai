@@ -1,0 +1,11 @@
+[app]
+name = "supt-ai"
+log_level = "INFO"
+
+[slack]
+# Configuration for Slack integration
+# signing_secret and bot_token come from environment variables
+
+[ai]
+# model = "gpt-4o"
+# max_tokens = 4096

@@ -1,0 +1,15 @@
+{
+  "name": "supt-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-powered support assistant",
+  "scripts": {
+    "build": "echo \"TODO: add build step\"",
+    "test": "echo \"TODO: add test runner\"",
+    "lint": "echo \"TODO: add linter\"",
+    "deploy": "cd cdk && npx cdk deploy"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT"
+}
