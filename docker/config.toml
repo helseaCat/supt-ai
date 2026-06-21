@@ -2,10 +2,16 @@
 name = "supt-ai"
 log_level = "INFO"
 
-[slack]
-# Configuration for Slack integration
-# signing_secret and bot_token come from environment variables
+[output]
+# Destinations for review output. Pluggable — add more adapters as needed.
+# Options: "github", "discord", "console"
+destinations = ["discord", "console"]
 
-[ai]
-# model = "gpt-4o"
-# max_tokens = 4096
+[discord]
+# Webhook URL loaded from Secrets Manager at runtime
+# Format: embed with PR title, summary, findings, and link
+embed_color = 5814783  # blurple
+
+[github]
+# GitHub output settings (used when "github" is in destinations)
+# post_as = "comment"  # "comment" or "review"
