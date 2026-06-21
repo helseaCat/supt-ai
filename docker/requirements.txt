@@ -1,2 +1,4 @@
 # Python dependencies for the Lambda container
-# Add packages here as needed
+pr-agent
+boto3
+litellm

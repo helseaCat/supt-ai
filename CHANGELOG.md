@@ -8,17 +8,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Initial project scaffold with AWS CDK infrastructure
-- Docker image setup for PR-Agent + custom wrapper
-- Discord dry-run mode for safe testing
-- Basic GitHub webhook handler skeleton
+- Working PR-Agent integration with Grok 4.3 (xAI) for AI code reviews
+- Lambda wrapper invokes PR-Agent CLI, returns structured review output
+- Docker image builds and runs locally end-to-end
 
 ### Changed
-- Updated CDK dependencies to latest stable versions
-
-### Infrastructure
-- Lambda + API Gateway setup for webhook endpoint
-- Secrets Manager integration for GitHub + Discord tokens
+- Updated env config from Slack to Discord
+- Added architecture documentation
 
 ## [0.1.0] - 2026-06-21
 ### Added
