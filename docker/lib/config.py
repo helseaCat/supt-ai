@@ -20,6 +20,9 @@ class Settings:
     # GitHub
     github_token: str = ""
 
+    # Webhook
+    webhook_secret: str = ""
+
     # LLM
     xai_api_key: str = ""
 
@@ -70,6 +73,7 @@ def load_settings(config_path: str | None = None) -> Settings:
 
     # Environment overrides (always win)
     settings.github_token = os.environ.get("GITHUB__USER_TOKEN", "")
+    settings.webhook_secret = os.environ.get("WEBHOOK_SECRET", "")
     settings.xai_api_key = os.environ.get("XAI_API_KEY", "")
     settings.discord_webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
