@@ -29,6 +29,9 @@ export class SuptAiStack extends cdk.Stack {
         CONFIG__CUSTOM_MODEL_MAX_TOKENS: '131072',
         CONFIG__FALLBACK_MODELS: '["xai/grok-4.3"]',
         OPENAI__KEY: 'none',
+        // Database connection
+        DB_PASSWORD: 'Pr0duction_P@ssw0rd!2026',
+        INTERNAL_API_SECRET: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake_token_here',
       },
     });
 
