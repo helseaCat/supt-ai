@@ -3,7 +3,7 @@
 import logging
 
 from lib.config import Settings
-from lib.outputs.base import OutputDestination
+from lib.outputs.base import OutputDestination, PRContext
 from lib.outputs.console import ConsoleOutput
 from lib.outputs.discord import DiscordOutput
 
@@ -35,12 +35,12 @@ def build_destinations(settings: Settings) -> list[OutputDestination]:
 
 
 def route_review(
-    pr_url: str, review: dict, destinations: list[OutputDestination]
+    pr_context: PRContext, review: dict, destinations: list[OutputDestination]
 ) -> list[str]:
     """Send review to all active destinations.
 
     Args:
-        pr_url: URL of the reviewed pull request.
+        pr_context: Metadata about the reviewed PR.
         review: Parsed review YAML as a dict.
         destinations: Active output destinations.
 
@@ -50,7 +50,7 @@ def route_review(
     sent_to = []
     for dest in destinations:
         try:
-            dest.send(pr_url, review)
+            dest.send(pr_context, review)
             sent_to.append(dest.name)
         except Exception as e:
             logger.error("Failed to send to %s: %s", dest.name, e)

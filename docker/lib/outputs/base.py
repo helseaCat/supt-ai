@@ -1,17 +1,29 @@
 """Base class for output destinations."""
 
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+
+@dataclass
+class PRContext:
+    """Metadata about the reviewed pull request."""
+
+    url: str = ""
+    title: str = ""
+    author: str = ""
+    branch: str = ""
+    repo: str = ""
 
 
 class OutputDestination(ABC):
     """Interface for review output destinations."""
 
     @abstractmethod
-    def send(self, pr_url: str, review: dict) -> None:
+    def send(self, pr_context: PRContext, review: dict) -> None:
         """Send a review result to this destination.
 
         Args:
-            pr_url: URL of the reviewed pull request.
+            pr_context: Metadata about the reviewed PR.
             review: Parsed review YAML as a dict.
         """
 
