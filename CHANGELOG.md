@@ -8,13 +8,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- Working PR-Agent integration with Grok 4.3 (xAI) for AI code reviews
-- Lambda wrapper invokes PR-Agent CLI, returns structured review output
-- Docker image builds and runs locally end-to-end
-
-### Changed
-- Updated env config from Slack to Discord
-- Added architecture documentation
+- PR-Agent integration with Grok 4.3 (xAI) for AI code reviews
+- Discord webhook output — review results posted as embeds
+- Modular output router pattern (console, discord — pluggable destinations)
+- Structured config loading from config.toml + environment overrides
+- Architecture documentation
+- docker/.env.example with all required environment variables
 
 ## [0.1.0] - 2026-06-21
 ### Added
