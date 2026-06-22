@@ -20,6 +20,7 @@ export class SuptAiStack extends cdk.Stack {
       environment: {
         // Populated manually in console or via CLI after first deploy.
         // Will move to Secrets Manager in a future iteration.
+        HOME: '/tmp',
         GITHUB__USER_TOKEN: '',
         WEBHOOK_SECRET: '',
         XAI_API_KEY: '',
