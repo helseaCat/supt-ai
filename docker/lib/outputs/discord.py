@@ -49,6 +49,9 @@ class DiscordOutput(OutputDestination):
         security = self._clean(r.get("security_concerns", "None"))
         issues = r.get("key_issues_to_review", [])
 
+        # Determine embed color based on severity
+        color = self._severity_color(security, issues)
+
         # Title: PR title or fallback
         title = pr_context.title or "PR Review Complete"
 
@@ -86,11 +89,29 @@ class DiscordOutput(OutputDestination):
                 "title": title,
                 "url": pr_context.url,
                 "description": description,
-                "color": self._embed_color,
+                "color": color,
                 "fields": fields,
                 "footer": {"text": "supt-ai | PR-Agent + Grok"},
             }]
         }
+
+    @staticmethod
+    def _severity_color(security: str, issues: list) -> int:
+        """Determine embed color based on review severity.
+
+        Red (0xE74C3C)    — security concerns found
+        Yellow (0xF1C40F) — key issues found, no security
+        Green (0x2ECC71)  — clean, no issues
+        """
+        has_security = security.lower() not in ("no", "none", "")
+        has_issues = bool(issues)
+
+        if has_security:
+            return 0xE74C3C  # red
+        elif has_issues:
+            return 0xF1C40F  # yellow
+        else:
+            return 0x2ECC71  # green
 
     @staticmethod
     def _clean(value) -> str:
