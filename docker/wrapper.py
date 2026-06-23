@@ -118,7 +118,7 @@ def _run_and_respond(pr_context: PRContext, command: str) -> dict:
         })
 
     # Parse and route output
-    review = extract_review(result.output)
+    review = extract_review(result.output, result.errors)
     sent_to = []
 
     if review:

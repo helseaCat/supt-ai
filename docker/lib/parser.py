@@ -16,12 +16,18 @@ def strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE.sub("", text)
 
 
-def extract_review(output: str) -> dict | None:
+def extract_review(output: str, errors: str = "") -> dict | None:
     """Extract the YAML review block from PR-Agent's verbose output.
+
+    PR-Agent logs the AI response via loguru which goes to stderr.
+    This function checks both stdout and stderr.
 
     Returns the parsed review dict, or None if extraction fails.
     """
-    match = _YAML_BLOCK.search(output)
+    # Combine and strip ANSI codes
+    combined = strip_ansi(output + "\n" + errors)
+
+    match = _YAML_BLOCK.search(combined)
     if not match:
         return None
     try:
