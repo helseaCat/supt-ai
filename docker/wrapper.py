@@ -9,6 +9,7 @@ import json
 import logging
 
 from lib.config import load_settings
+from lib.outputs.base import PRContext
 from lib.parser import extract_review
 from lib.reviewer import run_review
 from lib.router import build_destinations, route_review
@@ -66,8 +67,18 @@ def _handle_webhook(event: dict) -> dict:
     if not webhook_event:
         return _response(200, {"message": "Event ignored"})
 
+    # Build PR context from webhook payload
+    pr = payload.get("pull_request", {})
+    pr_context = PRContext(
+        url=webhook_event.pr_url,
+        title=pr.get("title", ""),
+        author=pr.get("user", {}).get("login", ""),
+        branch=pr.get("head", {}).get("ref", ""),
+        repo=payload.get("repository", {}).get("full_name", ""),
+    )
+
     # Run the review
-    return _run_and_respond(webhook_event.pr_url, "review")
+    return _run_and_respond(pr_context, "review")
 
 
 def _handle_direct(event: dict) -> dict:
@@ -77,17 +88,26 @@ def _handle_direct(event: dict) -> dict:
         return _response(400, {"error": "Missing required field: pr_url"})
 
     command = event.get("command", "review")
-    return _run_and_respond(pr_url, command)
+
+    pr_context = PRContext(
+        url=pr_url,
+        title=event.get("title", ""),
+        author=event.get("author", ""),
+        branch=event.get("branch", ""),
+        repo=event.get("repo", ""),
+    )
+
+    return _run_and_respond(pr_context, command)
 
 
-def _run_and_respond(pr_url: str, command: str) -> dict:
+def _run_and_respond(pr_context: PRContext, command: str) -> dict:
     """Run the review and return a structured response."""
     # Validate GitHub token
     if not settings.github_token:
         return _response(500, {"error": "GITHUB__USER_TOKEN not configured"})
 
     # Run the review
-    result = run_review(pr_url, command, settings)
+    result = run_review(pr_context.url, command, settings)
 
     if not result.success:
         return _response(500, {
@@ -98,18 +118,18 @@ def _run_and_respond(pr_url: str, command: str) -> dict:
         })
 
     # Parse and route output
-    review = extract_review(result.output)
+    review = extract_review(result.output, result.errors)
     sent_to = []
 
     if review:
-        sent_to = route_review(pr_url, review, destinations)
+        sent_to = route_review(pr_context, review, destinations)
     else:
         logger.warning("Could not parse review YAML from output")
 
     return _response(200, {
         "message": "Review complete",
         "command": command,
-        "pr_url": pr_url,
+        "pr_url": pr_context.url,
         "sent_to": sent_to,
     })
 

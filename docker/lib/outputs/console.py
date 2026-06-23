@@ -3,7 +3,7 @@
 import json
 import logging
 
-from lib.outputs.base import OutputDestination
+from lib.outputs.base import OutputDestination, PRContext
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +15,6 @@ class ConsoleOutput(OutputDestination):
     def name(self) -> str:
         return "console"
 
-    def send(self, pr_url: str, review: dict) -> None:
+    def send(self, pr_context: PRContext, review: dict) -> None:
         """Print the review to stdout."""
-        logger.info("Review for %s:\n%s", pr_url, json.dumps(review, indent=2))
+        logger.info("Review for %s:\n%s", pr_context.url, json.dumps(review, indent=2))

@@ -5,7 +5,7 @@ import logging
 import requests
 
 from lib.config import Settings
-from lib.outputs.base import OutputDestination
+from lib.outputs.base import OutputDestination, PRContext
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +21,13 @@ class DiscordOutput(OutputDestination):
     def name(self) -> str:
         return "discord"
 
-    def send(self, pr_url: str, review: dict) -> None:
+    def send(self, pr_context: PRContext, review: dict) -> None:
         """Post the review embed to Discord."""
         if not self._webhook_url:
             logger.warning("Discord webhook URL not configured, skipping")
             return
 
-        payload = self._build_embed(pr_url, review)
+        payload = self._build_embed(pr_context, review)
 
         try:
             resp = requests.post(self._webhook_url, json=payload, timeout=10)
@@ -40,7 +40,7 @@ class DiscordOutput(OutputDestination):
         except Exception as e:
             logger.warning("Failed to send Discord notification: %s", e)
 
-    def _build_embed(self, pr_url: str, review: dict) -> dict:
+    def _build_embed(self, pr_context: PRContext, review: dict) -> dict:
         """Build a Discord embed payload from the parsed review."""
         r = review.get("review", {})
 
@@ -48,6 +48,22 @@ class DiscordOutput(OutputDestination):
         tests = self._clean(r.get("relevant_tests", "?"))
         security = self._clean(r.get("security_concerns", "None"))
         issues = r.get("key_issues_to_review", [])
+
+        # Determine embed color based on severity
+        color = self._severity_color(security, issues)
+
+        # Title: PR title or fallback
+        title = pr_context.title or "PR Review Complete"
+
+        # Description with author, branch, repo
+        description_parts = []
+        if pr_context.author:
+            description_parts.append(f"**Author:** {pr_context.author}")
+        if pr_context.branch:
+            description_parts.append(f"**Branch:** `{pr_context.branch}`")
+        if pr_context.repo:
+            description_parts.append(f"**Repo:** {pr_context.repo}")
+        description = "\n".join(description_parts)
 
         fields = [
             {"name": "Effort to Review", "value": f"{effort}/5", "inline": True},
@@ -70,13 +86,32 @@ class DiscordOutput(OutputDestination):
 
         return {
             "embeds": [{
-                "title": "PR Review Complete",
-                "url": pr_url,
-                "color": self._embed_color,
+                "title": title,
+                "url": pr_context.url,
+                "description": description,
+                "color": color,
                 "fields": fields,
                 "footer": {"text": "supt-ai | PR-Agent + Grok"},
             }]
         }
+
+    @staticmethod
+    def _severity_color(security: str, issues: list) -> int:
+        """Determine embed color based on review severity.
+
+        Red (0xE74C3C)    — security concerns found
+        Yellow (0xF1C40F) — key issues found, no security
+        Green (0x2ECC71)  — clean, no issues
+        """
+        has_security = security.lower() not in ("no", "none", "")
+        has_issues = bool(issues)
+
+        if has_security:
+            return 0xE74C3C  # red
+        elif has_issues:
+            return 0xF1C40F  # yellow
+        else:
+            return 0x2ECC71  # green
 
     @staticmethod
     def _clean(value) -> str:
