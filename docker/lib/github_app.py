@@ -84,7 +84,7 @@ def get_installation_token(
     )
 
     try:
-        with urlopen(req) as resp:
+        with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
             token = data["token"]
             expires_at = data.get("expires_at", "unknown")
