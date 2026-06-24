@@ -16,6 +16,7 @@ export class SuptAiStack extends cdk.Stack {
       memorySize: 512,
       timeout: cdk.Duration.seconds(90),
       architecture: lambda.Architecture.ARM_64,
+      reservedConcurrentExecutions: 2,
       logRetention: logs.RetentionDays.TWO_WEEKS,
       environment: {
         // Populated manually in console or via CLI after first deploy.
@@ -37,6 +38,13 @@ export class SuptAiStack extends cdk.Stack {
       apiName: 'supt-ai-webhook',
       description: 'Receives GitHub webhook events for PR reviews',
     });
+
+    // Throttle: ~10 requests/minute sustained, burst of 10 for short spikes
+    const stage = httpApi.defaultStage?.node.defaultChild as apigatewayv2.CfnStage;
+    stage.defaultRouteSettings = {
+      throttlingRateLimit: 2,
+      throttlingBurstLimit: 10,
+    };
 
     // POST /webhook → Lambda
     const lambdaIntegration = new integrations.HttpLambdaIntegration(
