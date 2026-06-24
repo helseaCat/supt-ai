@@ -24,6 +24,11 @@ class Settings:
     # GitHub
     github_token: str = ""
 
+    # GitHub App (replaces PAT-based auth)
+    github_app_id: str = ""
+    github_app_private_key: str = ""
+    github_app_installation_id: str = ""
+
     # Webhook
     webhook_secret: str = ""
 
@@ -98,15 +103,21 @@ def load_settings(config_path: str | None = None) -> Settings:
     # Load from Secrets Manager (overrides config.toml)
     secrets = _load_secrets_from_aws()
     if secrets:
-        settings.github_token = secrets.get("GITHUB__USER_TOKEN", "")
+        settings.github_app_id = secrets.get("GITHUB_APP_ID", "")
+        settings.github_app_private_key = secrets.get("GITHUB_APP_PRIVATE_KEY", "")
+        settings.github_app_installation_id = secrets.get("GITHUB_APP_INSTALLATION_ID", "")
         settings.webhook_secret = secrets.get("WEBHOOK_SECRET", "")
         settings.xai_api_key = secrets.get("XAI_API_KEY", "")
         settings.discord_webhook_url = secrets.get("DISCORD_WEBHOOK_URL", "")
         logger.info("Loaded secrets from Secrets Manager")
 
     # Environment overrides (always win — for local dev with .env)
-    if os.environ.get("GITHUB__USER_TOKEN"):
-        settings.github_token = os.environ["GITHUB__USER_TOKEN"]
+    if os.environ.get("GITHUB_APP_ID"):
+        settings.github_app_id = os.environ["GITHUB_APP_ID"]
+    if os.environ.get("GITHUB_APP_PRIVATE_KEY"):
+        settings.github_app_private_key = os.environ["GITHUB_APP_PRIVATE_KEY"]
+    if os.environ.get("GITHUB_APP_INSTALLATION_ID"):
+        settings.github_app_installation_id = os.environ["GITHUB_APP_INSTALLATION_ID"]
     if os.environ.get("WEBHOOK_SECRET"):
         settings.webhook_secret = os.environ["WEBHOOK_SECRET"]
     if os.environ.get("XAI_API_KEY"):

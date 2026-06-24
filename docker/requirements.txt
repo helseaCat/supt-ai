@@ -2,3 +2,5 @@
 pr-agent
 boto3
 litellm
+PyJWT[crypto]
+cryptography

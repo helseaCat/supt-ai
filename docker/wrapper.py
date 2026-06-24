@@ -7,8 +7,10 @@ Supports two invocation modes:
 
 import json
 import logging
+import os
 
 from lib.config import load_settings
+from lib.github_app import get_installation_token
 from lib.outputs.base import PRContext
 from lib.parser import extract_review
 from lib.reviewer import run_review
@@ -102,9 +104,26 @@ def _handle_direct(event: dict) -> dict:
 
 def _run_and_respond(pr_context: PRContext, command: str) -> dict:
     """Run the review and return a structured response."""
-    # Validate GitHub token
-    if not settings.github_token:
-        return _response(500, {"error": "GITHUB__USER_TOKEN not configured"})
+    # Generate a fresh installation token from GitHub App credentials
+    if not all([
+        settings.github_app_id,
+        settings.github_app_private_key,
+        settings.github_app_installation_id,
+    ]):
+        return _response(500, {"error": "GitHub App credentials not configured"})
+
+    try:
+        token = get_installation_token(
+            app_id=settings.github_app_id,
+            private_key=settings.github_app_private_key,
+            installation_id=settings.github_app_installation_id,
+        )
+    except RuntimeError as e:
+        logger.error("Failed to generate installation token: %s", e)
+        return _response(500, {"error": f"GitHub App auth failed: {e}"})
+
+    # Set token in environment so PR-Agent picks it up
+    os.environ["GITHUB__USER_TOKEN"] = token
 
     # Run the review
     result = run_review(pr_context.url, command, settings)
