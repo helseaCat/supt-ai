@@ -47,8 +47,6 @@ def run_review(pr_url: str, command: str, settings: Settings) -> ReviewResult:
     env.setdefault("CONFIG.VERBOSITY_LEVEL", str(settings.verbosity_level))
 
     # Inject secrets into subprocess env (PR-Agent/litellm read these directly)
-    if settings.github_token:
-        env["GITHUB__USER_TOKEN"] = settings.github_token
     if settings.xai_api_key:
         env["XAI_API_KEY"] = settings.xai_api_key
     if settings.webhook_secret:

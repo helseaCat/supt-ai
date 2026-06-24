@@ -34,6 +34,17 @@ def _build_jwt(app_id: str, private_key: str) -> str:
     return jwt.encode(payload, private_key, algorithm="RS256")
 
 
+def _normalize_private_key(key: str) -> str:
+    """Ensure the PEM key has real newlines.
+
+    Handles the case where the key is stored with literal '\\n' strings
+    (common when pasting into AWS console or JSON editors).
+    """
+    if "\\n" in key and "\n" not in key.strip():
+        key = key.replace("\\n", "\n")
+    return key.strip()
+
+
 def get_installation_token(
     app_id: str,
     private_key: str,
@@ -52,6 +63,8 @@ def get_installation_token(
     Raises:
         RuntimeError: If token generation fails.
     """
+    private_key = _normalize_private_key(private_key)
+
     try:
         token_jwt = _build_jwt(app_id, private_key)
     except Exception as e:

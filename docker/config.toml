@@ -19,7 +19,7 @@ embed_color = 5814783  # blurple
 [pr_agent]
 # PR-Agent configuration — passed as env vars / settings overrides at runtime
 git_provider = "github"
-publish_output = false      # don't post to GitHub yet, capture output locally
+publish_output = true       # post review as a comment on the PR
 verbosity_level = 2         # print full results to console
 
 # LLM model — placeholder until Bedrock/Grok is configured
