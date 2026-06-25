@@ -13,9 +13,11 @@ export class SuptAiStack extends cdk.Stack {
     // Secrets Manager — create empty secrets, populate manually once
     const secrets = new secretsmanager.Secret(this, 'SuptAiSecrets', {
       secretName: 'supt-ai/config',
-      description: 'supt-ai secrets (GitHub token, webhook secret, xAI key, Discord URL)',
+      description: 'supt-ai secrets (GitHub App credentials, webhook secret, xAI key, Discord URL)',
       secretObjectValue: {
-        GITHUB__USER_TOKEN: cdk.SecretValue.unsafePlainText(''),
+        GITHUB_APP_ID: cdk.SecretValue.unsafePlainText(''),
+        GITHUB_APP_PRIVATE_KEY: cdk.SecretValue.unsafePlainText(''),
+        GITHUB_APP_INSTALLATION_ID: cdk.SecretValue.unsafePlainText(''),
         WEBHOOK_SECRET: cdk.SecretValue.unsafePlainText(''),
         XAI_API_KEY: cdk.SecretValue.unsafePlainText(''),
         DISCORD_WEBHOOK_URL: cdk.SecretValue.unsafePlainText(''),
