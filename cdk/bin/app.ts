@@ -10,4 +10,5 @@ new SuptAiStack(app, 'SuptAiStack', {
     account: process.env.CDK_DEFAULT_ACCOUNT,
     region: process.env.CDK_DEFAULT_REGION || 'us-east-1',
   },
+  githubRepo: 'helseaCat/supt-ai',
 });

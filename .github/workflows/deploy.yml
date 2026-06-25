@@ -8,11 +8,14 @@ on:
       - 'cdk/**'
       - 'docker/**'
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    # TODO: Configure environment protection rules
-    # environment: production
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
@@ -24,10 +27,12 @@ jobs:
       - run: npm ci
         working-directory: cdk
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
       - name: CDK Deploy
         run: npx cdk deploy --require-approval never
         working-directory: cdk
-        # env:
-        #   AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        #   AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        #   AWS_REGION: ${{ vars.AWS_REGION }}

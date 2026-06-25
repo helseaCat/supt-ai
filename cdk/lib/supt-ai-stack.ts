@@ -1,4 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
@@ -6,9 +7,50 @@ import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import { Construct } from 'constructs';
 
+interface SuptAiStackProps extends cdk.StackProps {
+  /** GitHub org/user and repo name, e.g. "my-org/supt-ai" */
+  githubRepo: string;
+}
+
 export class SuptAiStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props: SuptAiStackProps) {
     super(scope, id, props);
+
+    // ─── GitHub Actions OIDC Provider ────────────────────────────────────
+    // NOTE: Only one OIDC provider per account per URL is allowed.
+    // If you already have one, use iam.OpenIdConnectProvider.fromOpenIdConnectProviderArn() instead.
+    const oidcProvider = new iam.OpenIdConnectProvider(this, 'GitHubOidcProvider', {
+      url: 'https://token.actions.githubusercontent.com',
+      clientIds: ['sts.amazonaws.com'],
+    });
+
+    // ─── GitHub Actions Deploy Role (OIDC) ───────────────────────────────
+    // Scoped to the production environment on this repo.
+    // Bootstrap note: the very first deploy must be done manually (or via
+    // access keys) since this role won't exist yet. After that, the role
+    // manages itself.
+    const deployRole = new iam.Role(this, 'GitHubActionsDeployRole', {
+      roleName: 'supt-ai-github-deploy',
+      assumedBy: new iam.WebIdentityPrincipal(
+        oidcProvider.openIdConnectProviderArn,
+        {
+          StringEquals: {
+            'token.actions.githubusercontent.com:aud': 'sts.amazonaws.com',
+          },
+          StringLike: {
+            'token.actions.githubusercontent.com:sub': `repo:${props.githubRepo}:environment:production`,
+          },
+        },
+      ),
+      description: 'Role assumed by GitHub Actions via OIDC to deploy the SuptAi CDK stack',
+      maxSessionDuration: cdk.Duration.hours(1),
+    });
+
+    // Grant the deploy role permission to manage this stack's resources.
+    // Scope this down once your stack is stable.
+    deployRole.addManagedPolicy(
+      iam.ManagedPolicy.fromAwsManagedPolicyName('AdministratorAccess'),
+    );
 
     // Secrets Manager — create empty secrets, populate manually once
     const secrets = new secretsmanager.Secret(this, 'SuptAiSecrets', {
@@ -90,6 +132,11 @@ export class SuptAiStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SecretsArn', {
       value: secrets.secretArn,
       description: 'Secrets Manager ARN — populate via console or CLI',
+    });
+
+    new cdk.CfnOutput(this, 'DeployRoleArn', {
+      value: deployRole.roleArn,
+      description: 'IAM Role ARN for GitHub Actions OIDC deploy — set as AWS_DEPLOY_ROLE_ARN secret in GitHub',
     });
   }
 }
