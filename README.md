@@ -4,27 +4,14 @@ Automated PR reviewer powered by [PR-Agent](https://github.com/Codium-ai/pr-agen
 
 ## How it Works
 
-```
-GitHub PR event
-     │
-     ▼
-┌──────────────┐     ┌─────────────┐     ┌──────────────────┐
-│ API Gateway  │────▶│ Intake      │────▶│ SQS Review Queue │
-│ POST /webhook│     │ Lambda      │     │                  │
-└──────────────┘     └─────────────┘     └────────┬─────────┘
-                      (validates                   │
-                       signature,                  ▼
-                       filters events)   ┌──────────────────┐
-                                         │ Reviewer Lambda  │
-                                         │ (Docker)         │
-                                         └────────┬─────────┘
-                                                  │
-                                         ┌────────┴─────────┐
-                                         ▼                   ▼
-                                    ┌──────────┐     ┌─────────────┐
-                                    │ Discord  │     │ GitHub PR   │
-                                    │ Webhook  │     │ Comment     │
-                                    └──────────┘     └─────────────┘
+```mermaid
+flowchart LR
+    A[GitHub PR Event] --> B[API Gateway<br/>POST /webhook]
+    B --> C[Intake Lambda]
+    C -->|validates signature,<br/>filters events| D[SQS Review Queue]
+    D --> E[Reviewer Lambda<br/>Docker]
+    E --> F[Discord Webhook]
+    E --> G[GitHub PR Comment]
 ```
 
 1. A PR is opened/updated on GitHub
