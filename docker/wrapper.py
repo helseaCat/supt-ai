@@ -1,8 +1,8 @@
 """Lambda handler — thin entry point for supt-ai.
 
 Supports two invocation modes:
-1. Direct invocation: event contains pr_url directly (local testing, CLI)
-2. API Gateway: event is an HTTP request from GitHub webhook
+1. SQS: event contains Records[] from the review queue (production path)
+2. Direct invocation: event contains pr_url directly (local testing, CLI)
 """
 
 import json
@@ -15,7 +15,6 @@ from lib.outputs.base import PRContext
 from lib.parser import extract_review
 from lib.reviewer import run_review
 from lib.router import build_destinations, route_review
-from lib.webhook import parse_api_gateway_event, parse_webhook_payload, verify_signature
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -28,59 +27,39 @@ destinations = build_destinations(settings)
 def handler(event, context):
     """Main Lambda entry point.
 
-    Handles both direct invocations (pr_url in event) and API Gateway
-    webhook events from GitHub.
+    Handles SQS events (production) and direct invocations (testing).
     """
     logger.info("Received event: %s", json.dumps(event, default=str)[:2000])
 
-    # Determine invocation mode
-    if "requestContext" in event:
-        return _handle_webhook(event)
+    # SQS event — process each record
+    if "Records" in event:
+        return _handle_sqs(event)
     else:
         return _handle_direct(event)
 
 
-def _handle_webhook(event: dict) -> dict:
-    """Handle an API Gateway event from GitHub webhook."""
-    raw_body, headers = parse_api_gateway_event(event)
+def _handle_sqs(event: dict) -> dict:
+    """Handle SQS event from the review queue."""
+    for record in event["Records"]:
+        body = json.loads(record["body"])
 
-    # Verify signature
-    signature = headers.get("x-hub-signature-256", "")
-    if not settings.webhook_secret:
-        return _response(500, {"error": "WEBHOOK_SECRET not configured"})
+        pr_context = PRContext(
+            url=body["pr_url"],
+            title=body.get("title", ""),
+            author=body.get("author", ""),
+            branch=body.get("branch", ""),
+            repo=body.get("repo", ""),
+        )
 
-    if not verify_signature(raw_body, signature, settings.webhook_secret):
-        logger.warning("Invalid webhook signature")
-        return _response(401, {"error": "Invalid signature"})
+        result = _run_review(pr_context, "review")
 
-    # Parse the event
-    event_type = headers.get("x-github-event", "")
+        if not result["success"]:
+            # Raise to let SQS retry (and eventually DLQ)
+            raise RuntimeError(
+                f"Review failed for {pr_context.url}: {result.get('error', 'unknown')}"
+            )
 
-    # Respond to ping immediately
-    if event_type == "ping":
-        return _response(200, {"message": "pong"})
-
-    try:
-        payload = json.loads(raw_body)
-    except json.JSONDecodeError:
-        return _response(400, {"error": "Invalid JSON body"})
-
-    webhook_event = parse_webhook_payload(payload, event_type)
-    if not webhook_event:
-        return _response(200, {"message": "Event ignored"})
-
-    # Build PR context from webhook payload
-    pr = payload.get("pull_request", {})
-    pr_context = PRContext(
-        url=webhook_event.pr_url,
-        title=pr.get("title", ""),
-        author=pr.get("user", {}).get("login", ""),
-        branch=pr.get("head", {}).get("ref", ""),
-        repo=payload.get("repository", {}).get("full_name", ""),
-    )
-
-    # Run the review
-    return _run_and_respond(pr_context, "review")
+    return {"message": "Reviews complete", "count": len(event["Records"])}
 
 
 def _handle_direct(event: dict) -> dict:
@@ -99,18 +78,23 @@ def _handle_direct(event: dict) -> dict:
         repo=event.get("repo", ""),
     )
 
-    return _run_and_respond(pr_context, command)
+    result = _run_review(pr_context, command)
+
+    if not result["success"]:
+        return _response(500, result)
+
+    return _response(200, result)
 
 
-def _run_and_respond(pr_context: PRContext, command: str) -> dict:
-    """Run the review and return a structured response."""
+def _run_review(pr_context: PRContext, command: str) -> dict:
+    """Run the review and return a result dict."""
     # Generate a fresh installation token from GitHub App credentials
     if not all([
         settings.github_app_id,
         settings.github_app_private_key,
         settings.github_app_installation_id,
     ]):
-        return _response(500, {"error": "GitHub App credentials not configured"})
+        return {"success": False, "error": "GitHub App credentials not configured"}
 
     try:
         token = get_installation_token(
@@ -120,7 +104,7 @@ def _run_and_respond(pr_context: PRContext, command: str) -> dict:
         )
     except RuntimeError as e:
         logger.error("Failed to generate installation token: %s", e)
-        return _response(500, {"error": f"GitHub App auth failed: {e}"})
+        return {"success": False, "error": f"GitHub App auth failed: {e}"}
 
     # Set token in environment so PR-Agent picks it up
     os.environ["GITHUB__USER_TOKEN"] = token
@@ -129,12 +113,13 @@ def _run_and_respond(pr_context: PRContext, command: str) -> dict:
     result = run_review(pr_context.url, command, settings)
 
     if not result.success:
-        return _response(500, {
+        return {
+            "success": False,
             "error": "PR-Agent failed",
             "returncode": result.returncode,
             "stderr": result.errors[:2000],
             "stdout": result.output[:2000],
-        })
+        }
 
     # Parse and route output
     review = extract_review(result.output, result.errors)
@@ -145,16 +130,17 @@ def _run_and_respond(pr_context: PRContext, command: str) -> dict:
     else:
         logger.warning("Could not parse review YAML from output")
 
-    return _response(200, {
+    return {
+        "success": True,
         "message": "Review complete",
         "command": command,
         "pr_url": pr_context.url,
         "sent_to": sent_to,
-    })
+    }
 
 
 def _response(status_code: int, body: dict) -> dict:
-    """Build a Lambda response compatible with API Gateway."""
+    """Build a Lambda response compatible with API Gateway / direct invocation."""
     return {
         "statusCode": status_code,
         "headers": {"Content-Type": "application/json"},
