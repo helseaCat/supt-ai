@@ -1,10 +1,12 @@
 import * as cdk from 'aws-cdk-lib';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as lambdaEventSources from 'aws-cdk-lib/aws-lambda-event-sources';
 import * as apigatewayv2 from 'aws-cdk-lib/aws-apigatewayv2';
 import * as integrations from 'aws-cdk-lib/aws-apigatewayv2-integrations';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
+import * as sqs from 'aws-cdk-lib/aws-sqs';
 import { Construct } from 'constructs';
 
 interface SuptAiStackProps extends cdk.StackProps {
@@ -66,7 +68,22 @@ export class SuptAiStack extends cdk.Stack {
       },
     });
 
-    // Lambda function (Docker image built from local Dockerfile)
+    // ─── SQS: Review Queue + DLQ ───────────────────────────────────────
+    const dlq = new sqs.Queue(this, 'ReviewDLQ', {
+      queueName: 'supt-ai-review-dlq',
+      retentionPeriod: cdk.Duration.days(14),
+    });
+
+    const reviewQueue = new sqs.Queue(this, 'ReviewQueue', {
+      queueName: 'supt-ai-review-queue',
+      visibilityTimeout: cdk.Duration.seconds(120), // > Lambda timeout
+      deadLetterQueue: {
+        queue: dlq,
+        maxReceiveCount: 3,
+      },
+    });
+
+    // ─── Reviewer Lambda (SQS-triggered) ─────────────────────────────────
     const reviewerFn = new lambda.DockerImageFunction(this, 'ReviewerFunction', {
       functionName: 'supt-ai-reviewer',
       code: lambda.DockerImageCode.fromImageAsset('../docker'),
@@ -85,8 +102,33 @@ export class SuptAiStack extends cdk.Stack {
       },
     });
 
+    // Reviewer consumes from SQS (one message at a time — each review is heavy)
+    reviewerFn.addEventSource(new lambdaEventSources.SqsEventSource(reviewQueue, {
+      batchSize: 1,
+    }));
+
     // Grant Lambda read access to secrets
     secrets.grantRead(reviewerFn);
+
+    // ─── Intake Lambda (lightweight, validates + enqueues) ───────────────
+    const intakeFn = new lambda.Function(this, 'IntakeFunction', {
+      functionName: 'supt-ai-intake',
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'index.handler',
+      code: lambda.Code.fromAsset('../docker/intake'),
+      memorySize: 128,
+      timeout: cdk.Duration.seconds(10),
+      architecture: lambda.Architecture.X86_64,
+      logRetention: logs.RetentionDays.ONE_WEEK,
+      environment: {
+        QUEUE_URL: reviewQueue.queueUrl,
+        SECRETS_ARN: secrets.secretArn,
+      },
+    });
+
+    // Intake needs to send messages and read the webhook secret
+    reviewQueue.grantSendMessages(intakeFn);
+    secrets.grantRead(intakeFn);
 
     // API Gateway HTTP API
     const httpApi = new apigatewayv2.HttpApi(this, 'WebhookApi', {
@@ -101,42 +143,22 @@ export class SuptAiStack extends cdk.Stack {
       throttlingBurstLimit: 10,
     };
 
-    // POST /webhook → Lambda
-    const lambdaIntegration = new integrations.HttpLambdaIntegration(
-      'ReviewerIntegration',
-      reviewerFn,
+    // POST /webhook → Intake Lambda
+    const intakeIntegration = new integrations.HttpLambdaIntegration(
+      'IntakeIntegration',
+      intakeFn,
     );
 
     httpApi.addRoutes({
       path: '/webhook',
       methods: [apigatewayv2.HttpMethod.POST],
-      integration: lambdaIntegration,
+      integration: intakeIntegration,
     });
 
     // Outputs
-    new cdk.CfnOutput(this, 'ApiEndpoint', {
-      value: httpApi.apiEndpoint,
-      description: 'API Gateway endpoint URL',
-    });
-
     new cdk.CfnOutput(this, 'WebhookUrl', {
       value: `${httpApi.apiEndpoint}/webhook`,
       description: 'Full webhook URL for GitHub',
-    });
-
-    new cdk.CfnOutput(this, 'FunctionName', {
-      value: reviewerFn.functionName,
-      description: 'Lambda function name',
-    });
-
-    new cdk.CfnOutput(this, 'SecretsArn', {
-      value: secrets.secretArn,
-      description: 'Secrets Manager ARN — populate via console or CLI',
-    });
-
-    new cdk.CfnOutput(this, 'DeployRoleArn', {
-      value: deployRole.roleArn,
-      description: 'IAM Role ARN for GitHub Actions OIDC deploy — set as AWS_DEPLOY_ROLE_ARN secret in GitHub',
     });
   }
 }
