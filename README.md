@@ -32,6 +32,12 @@ TODO
 cd cdk && npx cdk deploy
 ```
 
+## Acknowledgements
+
+This project uses [PR-Agent](https://github.com/Codium-ai/pr-agent) by CodiumAI, licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0).
+
 ## License
 
-MIT
+This project is licensed under the [MIT License](LICENSE).
+
+Third-party dependencies are distributed under their own licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for details.
