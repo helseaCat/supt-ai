@@ -156,44 +156,9 @@ export class SuptAiStack extends cdk.Stack {
     });
 
     // Outputs
-    new cdk.CfnOutput(this, 'ApiEndpoint', {
-      value: httpApi.apiEndpoint,
-      description: 'API Gateway endpoint URL',
-    });
-
     new cdk.CfnOutput(this, 'WebhookUrl', {
       value: `${httpApi.apiEndpoint}/webhook`,
       description: 'Full webhook URL for GitHub',
-    });
-
-    new cdk.CfnOutput(this, 'ReviewerFunctionName', {
-      value: reviewerFn.functionName,
-      description: 'Reviewer Lambda function name',
-    });
-
-    new cdk.CfnOutput(this, 'IntakeFunctionName', {
-      value: intakeFn.functionName,
-      description: 'Intake Lambda function name',
-    });
-
-    new cdk.CfnOutput(this, 'ReviewQueueUrl', {
-      value: reviewQueue.queueUrl,
-      description: 'SQS queue URL for review jobs',
-    });
-
-    new cdk.CfnOutput(this, 'DLQUrl', {
-      value: dlq.queueUrl,
-      description: 'Dead letter queue URL — check for failed reviews',
-    });
-
-    new cdk.CfnOutput(this, 'SecretsArn', {
-      value: secrets.secretArn,
-      description: 'Secrets Manager ARN — populate via console or CLI',
-    });
-
-    new cdk.CfnOutput(this, 'DeployRoleArn', {
-      value: deployRole.roleArn,
-      description: 'IAM Role ARN for GitHub Actions OIDC deploy — set as AWS_DEPLOY_ROLE_ARN secret in GitHub',
     });
   }
 }
