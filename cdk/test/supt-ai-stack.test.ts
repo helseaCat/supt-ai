@@ -4,7 +4,9 @@ import { SuptAiStack } from '../lib/supt-ai-stack';
 
 test('Stack creates successfully', () => {
   const app = new cdk.App();
-  const stack = new SuptAiStack(app, 'TestStack');
+  const stack = new SuptAiStack(app, 'TestStack', {
+    githubRepo: 'test-org/supt-ai',
+  });
   const template = Template.fromStack(stack);
 
   // TODO: Add assertions
