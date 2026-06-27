@@ -72,7 +72,7 @@ export class SuptAiStack extends cdk.Stack {
       code: lambda.DockerImageCode.fromImageAsset('../docker'),
       memorySize: 512,
       timeout: cdk.Duration.seconds(90),
-      architecture: lambda.Architecture.ARM_64,
+      architecture: lambda.Architecture.X86_64,
       reservedConcurrentExecutions: 2,
       logRetention: logs.RetentionDays.TWO_WEEKS,
       environment: {
