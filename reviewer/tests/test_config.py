@@ -55,7 +55,7 @@ destinations = ["discord", "github"]
 def test_load_defaults():
     """load_settings with no config file and no env vars returns defaults."""
     settings = load_settings(config_path="/nonexistent/config.toml")
-    assert settings.model == "grok-3"
+    assert settings.model == "grok-4.5"
     assert settings.base_url == "https://api.x.ai/v1"
     assert settings.iteration_budget == 10
     assert settings.review_timeout == 90

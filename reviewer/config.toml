@@ -1,5 +1,5 @@
 [llm]
-model = "grok-3"
+model = "grok-4.5"
 base_url = "https://api.x.ai/v1"
 
 [agent]

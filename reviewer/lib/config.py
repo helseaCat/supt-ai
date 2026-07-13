@@ -35,7 +35,7 @@ class Settings:
 
     # LLM
     xai_api_key: str = ""
-    model: str = "grok-3"
+    model: str = "grok-4.5"
     base_url: str = "https://api.x.ai/v1"
 
     # Agent Loop
