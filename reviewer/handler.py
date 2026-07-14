@@ -29,10 +29,9 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Module-level logging setup for Lambda (JSON structured logging)
 # ---------------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(message)s",
-)
+# Configure root logger for Lambda — Lambda's default level is WARN,
+# which suppresses INFO logs. We must explicitly set it to INFO.
+logging.getLogger().setLevel(logging.INFO)
 
 
 # ---------------------------------------------------------------------------
