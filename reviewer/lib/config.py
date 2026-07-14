@@ -74,10 +74,11 @@ _ENV_SECRET_FIELD_MAP: dict[str, str] = {
     "DISCORD_WEBHOOK_URL": "discord_webhook_url",
     "REVIEW_TIMEOUT": "review_timeout",
     "ITERATION_BUDGET": "iteration_budget",
+    "MODEL": "model",
 }
 
 # Fields that require int conversion when loaded from string sources.
-_INT_FIELDS: set[str] = {"review_timeout", "iteration_budget"}
+_INT_FIELDS: set[str] = {"review_timeout", "iteration_budget", "model"}
 
 
 def _default_config_path() -> Path:
