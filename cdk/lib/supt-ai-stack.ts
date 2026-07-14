@@ -85,6 +85,7 @@ export class SuptAiStack extends cdk.Stack {
 
     // ─── Reviewer Lambda (SQS-triggered, zip-packaged) ───────────────────
     const reviewerFn = new lambda.Function(this, 'ReviewerFunction', {
+      functionName: 'supt-ai-reviewer',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'handler.handler',
       code: lambda.Code.fromAsset('../reviewer'),
