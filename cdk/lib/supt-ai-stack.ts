@@ -88,7 +88,15 @@ export class SuptAiStack extends cdk.Stack {
       functionName: 'supt-ai-reviewer',
       runtime: lambda.Runtime.PYTHON_3_12,
       handler: 'handler.handler',
-      code: lambda.Code.fromAsset('../reviewer'),
+      code: lambda.Code.fromAsset('../reviewer', {
+        bundling: {
+          image: lambda.Runtime.PYTHON_3_12.bundlingImage,
+          command: [
+            'bash', '-c',
+            'pip install -r requirements.txt -t /asset-output && cp -au . /asset-output',
+          ],
+        },
+      }),
       memorySize: 512,
       timeout: cdk.Duration.seconds(90),
       architecture: lambda.Architecture.X86_64,
