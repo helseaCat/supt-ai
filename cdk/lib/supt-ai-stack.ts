@@ -83,22 +83,19 @@ export class SuptAiStack extends cdk.Stack {
       },
     });
 
-    // ─── Reviewer Lambda (SQS-triggered) ─────────────────────────────────
-    const reviewerFn = new lambda.DockerImageFunction(this, 'ReviewerFunction', {
+    // ─── Reviewer Lambda (SQS-triggered, zip-packaged) ───────────────────
+    const reviewerFn = new lambda.Function(this, 'ReviewerFunction', {
       functionName: 'supt-ai-reviewer',
-      code: lambda.DockerImageCode.fromImageAsset('../docker'),
+      runtime: lambda.Runtime.PYTHON_3_12,
+      handler: 'handler.handler',
+      code: lambda.Code.fromAsset('../reviewer'),
       memorySize: 512,
       timeout: cdk.Duration.seconds(90),
       architecture: lambda.Architecture.X86_64,
       reservedConcurrentExecutions: 2,
       logRetention: logs.RetentionDays.TWO_WEEKS,
       environment: {
-        HOME: '/tmp',
         SECRETS_ARN: secrets.secretArn,
-        CONFIG__MODEL: 'xai/grok-4.3',
-        CONFIG__CUSTOM_MODEL_MAX_TOKENS: '131072',
-        CONFIG__FALLBACK_MODELS: '["xai/grok-4.3"]',
-        OPENAI__KEY: 'none',
       },
     });
 
