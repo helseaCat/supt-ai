@@ -120,11 +120,14 @@ class GitHubCommentOutput(OutputDestination):
                 if file_path:
                     # Link to file in the PR's head commit
                     file_url = f"https://github.com/{pr_context.owner}/{pr_context.repo}/blob/{pr_context.branch}/{file_path}"
+                    label = file_path
                     if start_line:
                         file_url += f"#L{start_line}"
+                        label += f":{start_line}"
                         if end_line and end_line != start_line:
                             file_url += f"-L{end_line}"
-                    location = f" ([`{file_path}:{start_line}`]({file_url}))"
+                            label += f"-{end_line}"
+                    location = f" ([`{label}`]({file_url}))"
 
                 parts.append(f"- **[{severity}/{category}]** {title}{location}")
                 if explanation:
