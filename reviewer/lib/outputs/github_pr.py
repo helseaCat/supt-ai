@@ -95,9 +95,12 @@ class GitHubPROutput(OutputDestination):
         current_line = 0
 
         for line in diff_text.splitlines():
-            # Detect file change.
-            if line.startswith("+++ b/"):
-                current_file = line[6:]
+            # Detect file change. Skip deleted files (+++ /dev/null).
+            if line.startswith("+++ "):
+                if line == "+++ /dev/null":
+                    current_file = None
+                    continue
+                current_file = line[6:]  # strip "+++ b/"
                 if current_file not in lines_map:
                     lines_map[current_file] = set()
                 continue
@@ -105,7 +108,10 @@ class GitHubPROutput(OutputDestination):
             # Detect hunk header.
             hunk_match = _HUNK_HEADER_RE.match(line)
             if hunk_match:
-                current_line = int(hunk_match.group(1))
+                new_start = int(hunk_match.group(1))
+                # Pure-deletion hunks have +0,0; don't set current_line to 0.
+                if new_start > 0:
+                    current_line = new_start
                 continue
 
             if current_file is None:
