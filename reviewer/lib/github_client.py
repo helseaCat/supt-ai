@@ -362,3 +362,30 @@ class GitHubClient:
         """
         api_path = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         return self.post(api_path, body=review)
+
+    def dismiss_review(self, owner: str, repo: str, pr_number: int, review_id: int) -> None:
+        """Dismiss a PR review.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+            review_id: The ID of the review to dismiss.
+        """
+        api_path = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews/{review_id}/dismissals"
+        self.post(api_path, body={"message": "Superseded by new review."})
+
+    def list_reviews(self, owner: str, repo: str, pr_number: int) -> list[dict]:
+        """List all reviews on a pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            pr_number: Pull request number.
+
+        Returns:
+            List of review dicts from the GitHub API.
+        """
+        api_path = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
+        result = self.get(api_path)
+        return result if isinstance(result, list) else []

@@ -57,6 +57,9 @@ class GitHubPROutput(OutputDestination):
         if inline_comments:
             payload["comments"] = inline_comments
 
+        # Dismiss previous reviews by this bot before posting a new one.
+        self._dismiss_previous_reviews(pr_context)
+
         # Submit the review.
         self._github_client.post_review(
             owner=pr_context.owner,
@@ -69,6 +72,42 @@ class GitHubPROutput(OutputDestination):
             len(inline_comments),
             len(overflow_findings),
         )
+
+    def _dismiss_previous_reviews(self, pr_context: PRContext) -> None:
+        """Dismiss all previous reviews posted by this bot on the PR.
+
+        This prevents review spam when multiple commits are pushed.
+        Dismissed reviews are grayed out but still visible in history.
+        """
+        try:
+            reviews = self._github_client.list_reviews(
+                owner=pr_context.owner,
+                repo=pr_context.repo,
+                pr_number=pr_context.pr_number,
+            )
+            for review in reviews:
+                # Only dismiss reviews that are from a bot and in COMMENTED state.
+                user = review.get("user", {})
+                if (
+                    user.get("type") == "Bot"
+                    and review.get("state") == "COMMENTED"
+                ):
+                    review_id = review.get("id")
+                    if review_id:
+                        try:
+                            self._github_client.dismiss_review(
+                                owner=pr_context.owner,
+                                repo=pr_context.repo,
+                                pr_number=pr_context.pr_number,
+                                review_id=review_id,
+                            )
+                            logger.info("Dismissed previous bot review %d.", review_id)
+                        except Exception:
+                            logger.warning(
+                                "Failed to dismiss review %d, continuing.", review_id
+                            )
+        except Exception:
+            logger.warning("Failed to list reviews for dismissal, continuing.")
 
     def _get_diff_lines_map(self, pr_context: PRContext) -> dict[str, set[int]]:
         """Parse the PR diff to build a map of reviewable lines per file.
