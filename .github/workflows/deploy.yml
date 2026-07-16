@@ -7,6 +7,8 @@ on:
     paths:
       - 'cdk/**'
       - 'docker/**'
+      - 'reviewer/**'
+      - '.github/workflows/deploy.yml'
 
 permissions:
   id-token: write
