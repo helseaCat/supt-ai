@@ -239,6 +239,33 @@ class GitHubClient:
         resp.raise_for_status()
         return resp.json()
 
+    def delete(self, path: str) -> None:
+        """Perform an authenticated DELETE request to the GitHub API.
+
+        Automatically refreshes the token on 401 and retries once.
+
+        Args:
+            path: API path.
+
+        Raises:
+            requests.HTTPError: On non-2xx response after potential retry.
+        """
+        self.ensure_token()
+        url = f"{GITHUB_API_BASE}{path}"
+
+        resp = requests.delete(
+            url, headers=self._auth_headers(), timeout=self._request_timeout
+        )
+
+        if resp.status_code == 401:
+            logger.warning("Got 401 from GitHub API, refreshing token and retrying.")
+            self._generate_token()
+            resp = requests.delete(
+                url, headers=self._auth_headers(), timeout=self._request_timeout
+            )
+
+        resp.raise_for_status()
+
     # ------------------------------------------------------------------
     # Repository API methods
     # ------------------------------------------------------------------
@@ -362,3 +389,48 @@ class GitHubClient:
         """
         api_path = f"/repos/{owner}/{repo}/pulls/{pr_number}/reviews"
         return self.post(api_path, body=review)
+
+    # ------------------------------------------------------------------
+    # Issue comment methods
+    # ------------------------------------------------------------------
+
+    def list_issue_comments(self, owner: str, repo: str, issue_number: int) -> list[dict]:
+        """List all comments on an issue or pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            issue_number: Issue or PR number.
+
+        Returns:
+            List of comment dicts from the GitHub API.
+        """
+        api_path = f"/repos/{owner}/{repo}/issues/{issue_number}/comments?per_page=100"
+        result = self.get(api_path)
+        return result if isinstance(result, list) else []
+
+    def delete_issue_comment(self, owner: str, repo: str, comment_id: int) -> None:
+        """Delete an issue comment.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            comment_id: The ID of the comment to delete.
+        """
+        api_path = f"/repos/{owner}/{repo}/issues/comments/{comment_id}"
+        self.delete(api_path)
+
+    def post_issue_comment(self, owner: str, repo: str, issue_number: int, body: str) -> dict:
+        """Post a comment on an issue or pull request.
+
+        Args:
+            owner: Repository owner.
+            repo: Repository name.
+            issue_number: Issue or PR number.
+            body: Markdown body of the comment.
+
+        Returns:
+            The created comment dict from the GitHub API.
+        """
+        api_path = f"/repos/{owner}/{repo}/issues/{issue_number}/comments"
+        return self.post(api_path, body={"body": body})

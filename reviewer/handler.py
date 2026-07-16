@@ -20,7 +20,7 @@ from lib.github_client import GitHubClient
 from lib.outputs import OutputRouter
 from lib.outputs.console import ConsoleOutput
 from lib.outputs.discord import DiscordOutput
-from lib.outputs.github_pr import GitHubPROutput
+from lib.outputs.github_comment import GitHubCommentOutput
 from lib.review_engine import PRContext, ReviewEngine, ReviewResult
 from lib.tool_registry import ToolRegistry
 
@@ -297,7 +297,7 @@ def _build_destinations(settings: Settings, github_client: GitHubClient) -> list
 
     for dest_name in settings.destinations:
         if dest_name == "github":
-            destinations.append(GitHubPROutput(github_client))
+            destinations.append(GitHubCommentOutput(github_client))
         elif dest_name == "discord":
             destinations.append(DiscordOutput(settings))
         elif dest_name == "console":
