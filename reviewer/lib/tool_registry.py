@@ -1,10 +1,11 @@
 """Tool definitions and dispatch for the agentic review loop.
 
-Exposes five tools to the LLM (get_file_contents, search_code, list_directory,
+Exposes four tools to the LLM (get_file_contents, list_directory,
 get_commit_info, get_file_at_line) in OpenAI function-calling format. get_pr_diff
-is defined but excluded from LLM tool definitions since the diff is pre-provided
-in the user message. Handles input validation, execution, content truncation,
-and error wrapping.
+is excluded because the diff is pre-provided in the user message. search_code is
+excluded because GitHub code search only indexes the default branch, doesn't work
+reliably with App tokens, and wastes tool calls returning empty results. Handles
+input validation, execution, content truncation, and error wrapping.
 """
 
 from __future__ import annotations
@@ -193,13 +194,14 @@ class ToolRegistry:
     def get_tool_definitions(self) -> list[dict]:
         """Return OpenAI-format function definitions for tools available to the LLM.
 
-        Excludes get_pr_diff because the diff is always pre-provided in the
-        user message. This prevents the LLM from wasting a tool call to
-        re-fetch content it already has.
+        Excludes get_pr_diff (diff is pre-provided in the user message) and
+        search_code (GitHub code search only indexes the default branch and
+        doesn't work reliably with App tokens).
         """
+        excluded = {"get_pr_diff", "search_code"}
         return [
             tool for tool in _TOOL_DEFINITIONS
-            if tool["function"]["name"] != "get_pr_diff"
+            if tool["function"]["name"] not in excluded
         ]
 
     def execute(self, tool_name: str, arguments: dict) -> ToolResult:
