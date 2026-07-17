@@ -41,19 +41,19 @@ def registry(mock_github) -> ToolRegistry:
 # ─── Example-based unit tests ────────────────────────────────────────────────
 
 
-def test_get_tool_definitions_returns_six_tools(registry):
-    """Tool definitions expose exactly 6 tools in OpenAI format."""
+def test_get_tool_definitions_returns_five_tools(registry):
+    """Tool definitions expose 5 tools (get_pr_diff excluded since diff is pre-provided)."""
     defs = registry.get_tool_definitions()
-    assert len(defs) == 6
+    assert len(defs) == 5
     names = {d["function"]["name"] for d in defs}
     assert names == {
         "get_file_contents",
         "search_code",
         "list_directory",
-        "get_pr_diff",
         "get_commit_info",
         "get_file_at_line",
     }
+    assert "get_pr_diff" not in names
 
 
 def test_execute_unknown_tool(registry):

@@ -1,8 +1,10 @@
 """Tool definitions and dispatch for the agentic review loop.
 
-Exposes six tools (get_file_contents, search_code, list_directory, get_pr_diff,
-get_commit_info, get_file_at_line) in OpenAI function-calling format and handles
-input validation, execution, content truncation, and error wrapping.
+Exposes five tools to the LLM (get_file_contents, search_code, list_directory,
+get_commit_info, get_file_at_line) in OpenAI function-calling format. get_pr_diff
+is defined but excluded from LLM tool definitions since the diff is pre-provided
+in the user message. Handles input validation, execution, content truncation,
+and error wrapping.
 """
 
 from __future__ import annotations
