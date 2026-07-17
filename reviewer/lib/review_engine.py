@@ -568,6 +568,8 @@ class ReviewEngine:
 ### Tool Usage
 You have tools available to fetch file contents, search code, list directories, get commit info, and view specific line ranges. USE THESE TOOLS to verify your understanding before making any claims. Do not guess or assume — verify via tools first.
 
+IMPORTANT: The full PR diff is already provided in the user message below. Use the listed tools only to fetch additional context (file contents, directory structure, related code) that helps you understand the changes.
+
 Focus your review on files and lines CHANGED in the PR diff. Use unchanged files only as supporting context to understand the impact of changes.
 
 ### No Hedging
@@ -649,7 +651,7 @@ When you have completed your review, produce your final output as a single JSON 
 {diff}
 ```
 
-Review the changes above. Use the available tools to fetch any additional context you need to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
+The complete PR diff is provided above — do not re-fetch it. Use the available tools to fetch additional context (file contents, related code, directory structure) needed to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
 
     # ------------------------------------------------------------------
     # Response handling and validation
