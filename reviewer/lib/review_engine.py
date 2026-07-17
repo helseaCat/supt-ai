@@ -566,7 +566,7 @@ class ReviewEngine:
 ## Instructions
 
 ### Tool Usage
-You have tools available to fetch file contents, search code, list directories, get commit info, and view specific line ranges. USE THESE TOOLS to verify your understanding before making any claims. Do not guess or assume — verify via tools first.
+You have tools available to fetch file contents, list directories, get commit info, and view specific line ranges. USE THESE TOOLS to verify your understanding before making any claims. Do not guess or assume — verify via tools first.
 
 IMPORTANT: The full PR diff is already provided in the user message below. Use the listed tools only to fetch additional context (file contents, directory structure, related code) that helps you understand the changes.
 
