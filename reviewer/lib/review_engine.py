@@ -130,7 +130,7 @@ class ReviewEngine:
 
         tools = self._tool_registry.get_tool_definitions()
         iteration = 0
-        iteration_budget = self._settings.iteration_budget
+        iteration_budget = self._compute_iteration_budget(diff)
 
         while iteration < iteration_budget:
             iteration += 1
@@ -572,6 +572,9 @@ IMPORTANT: The full PR diff is already provided in the user message below. Use t
 
 Focus your review on files and lines CHANGED in the PR diff. Use unchanged files only as supporting context to understand the impact of changes.
 
+### Efficient Tool Use
+Before each tool turn, ask yourself: "Do I have an unverified finding hypothesis that requires this fetch?" If the answer is no — if you are exploring for general context rather than verifying a specific claim — STOP and produce your final review with the information you already have. Do not fetch files unrelated to the changed code (e.g., layout components, unrelated pages, config files) unless a specific finding requires verifying their content.
+
 ### No Hedging
 NEVER use hedging language. The following phrases are BANNED:
 - "it appears that"
@@ -652,6 +655,42 @@ When you have completed your review, produce your final output as a single JSON 
 ```
 
 The complete PR diff is provided above — do not re-fetch it. Use the available tools to fetch additional context (file contents, related code, directory structure) needed to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
+
+    # ------------------------------------------------------------------
+    # Iteration budget computation
+    # ------------------------------------------------------------------
+
+    def _compute_iteration_budget(self, diff: str) -> int:
+        """Compute iteration budget dynamically based on diff size.
+
+        Smaller diffs need fewer tool turns to review. This prevents the model
+        from over-exploring on trivial PRs while still allowing deep investigation
+        for large, complex changes.
+
+        Tiers:
+          - < 200 diff lines  → 5 iterations (small PR, 2-3 files)
+          - 200–1000 lines    → 8 iterations (medium PR)
+          - > 1000 lines      → settings.iteration_budget (large PR, use full budget)
+
+        The configured iteration_budget always acts as a ceiling.
+
+        Args:
+            diff: The unified diff text.
+
+        Returns:
+            The iteration budget to use for this review.
+        """
+        max_budget = self._settings.iteration_budget
+        diff_lines = len(diff.splitlines())
+
+        if diff_lines < 200:
+            budget = 5
+        elif diff_lines <= 1000:
+            budget = 8
+        else:
+            budget = max_budget
+
+        return min(budget, max_budget)
 
     # ------------------------------------------------------------------
     # Response handling and validation
