@@ -127,9 +127,21 @@ def _handle_issue_comment(payload: dict) -> dict:
     if action != "created":
         return _response(200, {"message": f"Ignored comment action: {action}"})
 
+    # Exact command match — only "/review" as the first token
     comment_body = payload.get("comment", {}).get("body", "").strip()
-    if not comment_body.lower().startswith(REVIEW_COMMAND):
+    first_token = comment_body.lower().split()[0] if comment_body else ""
+    if first_token != REVIEW_COMMAND:
         return _response(200, {"message": "Not a /review command"})
+
+    # Only allow repo collaborators / PR author to trigger reviews
+    commenter = payload.get("comment", {}).get("user", {}).get("login", "")
+    pr_author = payload.get("issue", {}).get("user", {}).get("login", "")
+    author_association = payload.get("comment", {}).get("author_association", "")
+    allowed_associations = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+    if commenter != pr_author and author_association not in allowed_associations:
+        logger.info("Ignoring /review from non-collaborator: %s", commenter)
+        return _response(200, {"message": "Not authorized to trigger /review"})
 
     # issue_comment fires for both issues and PRs — only PRs have pull_request key
     issue = payload.get("issue", {})
@@ -144,14 +156,9 @@ def _handle_issue_comment(payload: dict) -> dict:
     if not pr_url:
         return _response(400, {"error": "Could not determine PR URL"})
 
-    title = issue.get("title", "")
-    author = issue.get("user", {}).get("login", "")
-    repo_full = payload.get("repository", {}).get("full_name", "")
-
     # For issue_comment, we don't have head ref directly — reviewer will fetch it
     _enqueue_review(pr_url, "review_requested_by_comment", issue, payload)
 
-    commenter = payload.get("comment", {}).get("user", {}).get("login", "")
     logger.info(
         "Enqueued /review for %s (requested by %s)", pr_url, commenter
     )
