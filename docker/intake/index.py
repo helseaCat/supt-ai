@@ -148,13 +148,14 @@ def _handle_issue_comment(payload: dict) -> dict:
     if "pull_request" not in issue:
         return _response(200, {"message": "Comment is not on a PR"})
 
-    pr_url = issue.get("pull_request", {}).get("html_url", "")
-    if not pr_url:
-        # Fallback to issue html_url (GitHub PR URLs work for both)
-        pr_url = issue.get("html_url", "")
-
-    if not pr_url:
+    # Build canonical PR URL from repo + issue number
+    # (issue_comment payloads don't include pull_request.html_url)
+    repo_full = payload.get("repository", {}).get("full_name", "")
+    pr_number = issue.get("number")
+    if not repo_full or not pr_number:
         return _response(400, {"error": "Could not determine PR URL"})
+
+    pr_url = f"https://github.com/{repo_full}/pull/{pr_number}"
 
     # For issue_comment, we don't have head ref directly — reviewer will fetch it
     _enqueue_review(pr_url, "review_requested_by_comment", issue, payload)
