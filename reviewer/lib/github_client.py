@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 GITHUB_API_BASE = "https://api.github.com"
 
 # Token is considered expired if within this many seconds of expiry.
-_TOKEN_EXPIRY_BUFFER_SECONDS = 5 * 60  # 5 minutes
+_TOKEN_EXPIRY_BUFFER_SECONDS = 0  # No buffer
 
 
 # ---------------------------------------------------------------------------
