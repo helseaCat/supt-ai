@@ -80,14 +80,18 @@ def handler(event, context):
     if event_type == "ping":
         return _response(200, {"message": "pong"})
 
-    # Only handle pull_request events
-    if event_type != "pull_request":
-        return _response(200, {"message": f"Ignored event: {event_type}"})
-
     try:
         payload = json.loads(raw_body)
     except json.JSONDecodeError:
         return _response(400, {"error": "Invalid JSON body"})
+
+    # Handle /review command on PR comments
+    if event_type == "issue_comment":
+        return _handle_issue_comment(payload)
+
+    # Only handle pull_request events
+    if event_type != "pull_request":
+        return _response(200, {"message": f"Ignored event: {event_type}"})
 
     # Filter to supported actions
     action = payload.get("action", "")
@@ -104,13 +108,73 @@ def handler(event, context):
         return _response(400, {"error": "No PR URL in payload"})
 
     # Enqueue the review job
+    _enqueue_review(pr_url, action, pr, payload)
+
+    logger.info("Enqueued review for %s (action: %s)", pr_url, action)
+    return _response(200, {"message": "Review queued", "pr_url": pr_url})
+
+
+# ---------------------------------------------------------------------------
+# /review command handler
+# ---------------------------------------------------------------------------
+
+REVIEW_COMMAND = "/review"
+
+
+def _handle_issue_comment(payload: dict) -> dict:
+    """Handle issue_comment events — triggers review on /review command."""
+    action = payload.get("action", "")
+    if action != "created":
+        return _response(200, {"message": f"Ignored comment action: {action}"})
+
+    # Exact command match — only "/review" as the first token
+    comment_body = payload.get("comment", {}).get("body", "").strip()
+    first_token = comment_body.lower().split()[0] if comment_body else ""
+    if first_token != REVIEW_COMMAND:
+        return _response(200, {"message": "Not a /review command"})
+
+    # Only allow repo collaborators / PR author to trigger reviews
+    commenter = payload.get("comment", {}).get("user", {}).get("login", "")
+    pr_author = payload.get("issue", {}).get("user", {}).get("login", "")
+    author_association = payload.get("comment", {}).get("author_association", "")
+    allowed_associations = {"OWNER", "MEMBER", "COLLABORATOR"}
+
+    if commenter != pr_author and author_association not in allowed_associations:
+        logger.info("Ignoring /review from non-collaborator: %s", commenter)
+        return _response(200, {"message": "Not authorized to trigger /review"})
+
+    # issue_comment fires for both issues and PRs — only PRs have pull_request key
+    issue = payload.get("issue", {})
+    if "pull_request" not in issue:
+        return _response(200, {"message": "Comment is not on a PR"})
+
+    # Build canonical PR URL from repo + issue number
+    # (issue_comment payloads don't include pull_request.html_url)
+    repo_full = payload.get("repository", {}).get("full_name", "")
+    pr_number = issue.get("number")
+    if not repo_full or not pr_number:
+        return _response(400, {"error": "Could not determine PR URL"})
+
+    pr_url = f"https://github.com/{repo_full}/pull/{pr_number}"
+
+    # For issue_comment, we don't have head ref directly — reviewer will fetch it
+    _enqueue_review(pr_url, "review_requested_by_comment", issue, payload)
+
+    logger.info(
+        "Enqueued /review for %s (requested by %s)", pr_url, commenter
+    )
+    return _response(200, {"message": "Review queued", "pr_url": pr_url})
+
+
+def _enqueue_review(pr_url: str, action: str, pr_or_issue: dict, payload: dict) -> None:
+    """Enqueue a review job to SQS."""
     sqs = boto3.client("sqs")
     message = {
         "pr_url": pr_url,
         "action": action,
-        "title": pr.get("title", ""),
-        "author": pr.get("user", {}).get("login", ""),
-        "branch": pr.get("head", {}).get("ref", ""),
+        "title": pr_or_issue.get("title", ""),
+        "author": pr_or_issue.get("user", {}).get("login", ""),
+        "branch": pr_or_issue.get("head", {}).get("ref", ""),
         "repo": payload.get("repository", {}).get("full_name", ""),
     }
 
@@ -118,6 +182,3 @@ def handler(event, context):
         QueueUrl=QUEUE_URL,
         MessageBody=json.dumps(message),
     )
-
-    logger.info("Enqueued review for %s (action: %s)", pr_url, action)
-    return _response(200, {"message": "Review queued", "pr_url": pr_url})

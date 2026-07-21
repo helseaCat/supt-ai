@@ -225,13 +225,22 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
         pr_number=pr_context.pr_number,
     )
 
+    # --- Resolve head ref if missing (e.g. /review comment trigger) ---
+    head_ref = pr_context.branch
+    if not head_ref:
+        pr_data = github_client.get(
+            f"/repos/{pr_context.owner}/{pr_context.repo}/pulls/{pr_context.pr_number}"
+        )
+        head_ref = pr_data.get("head", {}).get("ref", "") if isinstance(pr_data, dict) else ""
+        pr_context.branch = head_ref
+
     # --- Create ToolRegistry ---
     tool_registry = ToolRegistry(
         github_client=github_client,
         owner=pr_context.owner,
         repo=pr_context.repo,
         pr_number=pr_context.pr_number,
-        head_ref=pr_context.branch,
+        head_ref=head_ref,
     )
 
     # --- Remaining time helper ---
