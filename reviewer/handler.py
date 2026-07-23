@@ -218,6 +218,17 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
         request_timeout=settings.tool_timeout,
     )
 
+    # --- Post "review started" comment ---
+    try:
+        github_client.post_issue_comment(
+            owner=pr_context.owner,
+            repo=pr_context.repo,
+            issue_number=pr_context.pr_number,
+            body="⏳ Review started — I'll post my findings shortly.",
+        )
+    except Exception as exc:
+        logger.warning("Failed to post review-started comment: %s", exc)
+
     # --- Fetch PR diff ---
     diff = github_client.get_pr_diff(
         owner=pr_context.owner,
