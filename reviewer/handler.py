@@ -221,24 +221,27 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
     # --- Post "review started" comment ---
     if "github" in settings.destinations:
         try:
-            # Delete any prior bot comments (handles retries leaving stale ⏳ comments)
+            # Delete only prior "review started" comments (not final reviews)
             existing = github_client.list_issue_comments(
                 owner=pr_context.owner,
                 repo=pr_context.repo,
                 issue_number=pr_context.pr_number,
             )
             for comment in existing:
-                if "<!-- supt-ai-review -->" in comment.get("body", ""):
-                    try:
-                        github_client.delete_issue_comment(
-                            owner=pr_context.owner,
-                            repo=pr_context.repo,
-                            comment_id=comment["id"],
-                        )
-                    except Exception:
-                        pass
+                body = comment.get("body", "")
+                if "<!-- supt-ai-review -->" in body and "Review started" in body:
+                    comment_id = comment.get("id")
+                    if comment_id:
+                        try:
+                            github_client.delete_issue_comment(
+                                owner=pr_context.owner,
+                                repo=pr_context.repo,
+                                comment_id=comment_id,
+                            )
+                        except Exception:
+                            logger.warning("Failed to delete stale started comment %s", comment_id)
         except Exception as exc:
-            logger.warning("Failed to clean up prior bot comments: %s", exc)
+            logger.warning("Failed to clean up prior started comments: %s", exc)
 
         try:
             github_client.post_issue_comment(
