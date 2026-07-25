@@ -229,7 +229,7 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
             )
             for comment in existing:
                 body = comment.get("body", "")
-                if "<!-- supt-ai-review -->" in body and "Review started" in body:
+                if "<!-- supt-ai-review-started -->" in body:
                     comment_id = comment.get("id")
                     if comment_id:
                         try:
@@ -248,7 +248,7 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
                 owner=pr_context.owner,
                 repo=pr_context.repo,
                 issue_number=pr_context.pr_number,
-                body="<!-- supt-ai-review -->\n\n⏳ Review started — I'll post my findings shortly.",
+                body="<!-- supt-ai-review -->\n<!-- supt-ai-review-started -->\n\n⏳ Review started — I'll post my findings shortly.",
             )
         except Exception as exc:
             logger.warning("Failed to post review-started comment: %s", exc)
