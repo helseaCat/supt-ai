@@ -76,7 +76,7 @@ export class SuptAiStack extends cdk.Stack {
 
     const reviewQueue = new sqs.Queue(this, 'ReviewQueue', {
       queueName: 'supt-ai-review-queue',
-      visibilityTimeout: cdk.Duration.seconds(120), // > Lambda timeout
+      visibilityTimeout: cdk.Duration.seconds(360), // > Lambda timeout
       deadLetterQueue: {
         queue: dlq,
         maxReceiveCount: 3,
@@ -98,7 +98,7 @@ export class SuptAiStack extends cdk.Stack {
         },
       }),
       memorySize: 512,
-      timeout: cdk.Duration.seconds(90),
+      timeout: cdk.Duration.seconds(300),
       architecture: lambda.Architecture.X86_64,
       reservedConcurrentExecutions: 2,
       logRetention: logs.RetentionDays.TWO_WEEKS,

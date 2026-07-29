@@ -58,7 +58,7 @@ def test_load_defaults():
     assert settings.model == "grok-4.5"
     assert settings.base_url == "https://api.x.ai/v1"
     assert settings.iteration_budget == 10
-    assert settings.review_timeout == 90
+    assert settings.review_timeout == 270
     assert settings.destinations == ["console"]
     assert settings.xai_api_key == ""
 
