@@ -279,12 +279,20 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
     )
 
     # --- Remaining time helper ---
+    # Cap remaining time at review_timeout so the engine respects the configured
+    # budget even if the Lambda timeout is higher (e.g. Lambda = 300s, review = 300s).
+    _review_deadline_ms = settings.review_timeout * 1000
+    _review_start = time.perf_counter()
+
     if context and hasattr(context, "get_remaining_time_in_millis"):
-        remaining_time_ms = context.get_remaining_time_in_millis
+        _lambda_remaining = context.get_remaining_time_in_millis
+        remaining_time_ms = lambda: min(  # noqa: E731
+            _lambda_remaining(),
+            max(0, int(_review_deadline_ms - (time.perf_counter() - _review_start) * 1000)),
+        )
     else:
-        # Fallback for local testing: assume 290 seconds remaining
-        _local_start = time.perf_counter()
-        remaining_time_ms = lambda: max(0, int(290_000 - (time.perf_counter() - _local_start) * 1000))  # noqa: E731
+        # Fallback for local testing: derive from settings.review_timeout
+        remaining_time_ms = lambda: max(0, int(_review_deadline_ms - (time.perf_counter() - _review_start) * 1000))  # noqa: E731
 
     # --- Create and run ReviewEngine ---
     engine = ReviewEngine(
