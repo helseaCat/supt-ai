@@ -280,7 +280,7 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
 
     # --- Remaining time helper ---
     # Cap remaining time at review_timeout so the engine respects the configured
-    # budget even if the Lambda timeout is higher (e.g. Lambda = 300s, review = 300s).
+    # budget even if the Lambda timeout is higher (e.g. Lambda = 300s, review = 270s).
     _review_deadline_ms = settings.review_timeout * 1000
     _review_start = time.perf_counter()
 
