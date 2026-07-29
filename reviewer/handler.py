@@ -282,9 +282,9 @@ def _run_review(pr_context: PRContext, context: Any) -> dict:
     if context and hasattr(context, "get_remaining_time_in_millis"):
         remaining_time_ms = context.get_remaining_time_in_millis
     else:
-        # Fallback for local testing: assume 80 seconds remaining
+        # Fallback for local testing: assume 290 seconds remaining
         _local_start = time.perf_counter()
-        remaining_time_ms = lambda: max(0, int(80_000 - (time.perf_counter() - _local_start) * 1000))  # noqa: E731
+        remaining_time_ms = lambda: max(0, int(290_000 - (time.perf_counter() - _local_start) * 1000))  # noqa: E731
 
     # --- Create and run ReviewEngine ---
     engine = ReviewEngine(

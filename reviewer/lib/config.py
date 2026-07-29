@@ -50,7 +50,7 @@ class Settings:
     destinations: list[str] = field(default_factory=lambda: ["console"])
 
     # Timeouts
-    review_timeout: int = 90
+    review_timeout: int = 300
 
 
 # Mapping from TOML section.key → Settings field name.
