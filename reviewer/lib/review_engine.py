@@ -121,9 +121,16 @@ class ReviewEngine:
 
         # --- Adaptive complexity gate: skip tools for trivial diffs ---
         if self._is_trivial_diff(diff):
+            lines = diff.splitlines()
+            changed = sum(
+                1 for l in lines
+                if (l.startswith("+") and not l.startswith("+++"))
+                or (l.startswith("-") and not l.startswith("---"))
+            )
+            files = sum(1 for l in lines if l.startswith("diff --git"))
             logger.info(
-                "Trivial diff detected (%d lines), skipping tool calls",
-                len(diff.splitlines()),
+                "Trivial diff detected (%d changed lines, %d files), skipping tool calls",
+                changed, files,
             )
             return self._run_trivial(pr_context, diff, start_time)
 
@@ -664,6 +671,79 @@ When you have completed your review, produce your final output as a single JSON 
 
 The complete PR diff is provided above — do not re-fetch it. Use the available tools to fetch additional context (file contents, related code, directory structure) needed to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
 
+    def _build_trivial_system_prompt(self, pr_context: PRContext) -> str:
+        """Build a streamlined system prompt for trivial diffs (no tool references).
+
+        This prompt omits all tool-usage instructions since trivial reviews
+        are single-turn with no tools available.
+        """
+        return f"""You are an expert code reviewer analyzing a small pull request.
+
+## Repository Context
+- Repository: {pr_context.owner}/{pr_context.repo}
+- PR #{pr_context.pr_number}: {pr_context.title}
+- Author: {pr_context.author}
+- Branch: {pr_context.branch}
+
+## Instructions
+
+The complete PR diff is provided in the user message. This is a small change — review it directly from the diff without needing additional context.
+
+### No Hedging
+NEVER use hedging language. The following phrases are BANNED:
+- "it appears that", "if this is", "it seems like", "this might be", "possibly", "probably", "I think"
+
+If you cannot confidently identify an issue from the diff alone, OMIT the finding entirely.
+
+### Finding Categories
+Categorize each finding as one of:
+- bug: Functional defects, logic errors, incorrect behavior
+- security: Vulnerabilities, unsafe patterns, missing validation
+- performance: Inefficiencies, unnecessary allocations
+- maintainability: Code complexity, poor naming, missing abstractions
+- style: Formatting, naming conventions, consistency issues
+- documentation: Missing or incorrect comments, docstrings, READMEs
+
+### Finding Details
+For each finding, provide:
+- The specific file path and line range (start_line and end_line)
+- A concise title (max 120 characters)
+- A clear explanation (max 500 characters) of what is wrong and why
+- A concrete suggestion or fix
+
+### Severity Levels
+- critical: Bugs that cause incorrect behavior, security vulnerabilities, data loss risks
+- warning: Issues that degrade quality but don't break functionality
+- info: Style issues, minor suggestions, documentation improvements
+
+### Output Format
+Output a single JSON object with this exact structure:
+
+```json
+{{{{
+  "findings": [
+    {{{{
+      "severity": "critical|warning|info",
+      "category": "bug|security|performance|maintainability|style|documentation",
+      "file_path": "path/to/file.py",
+      "start_line": 42,
+      "end_line": 45,
+      "title": "Brief description of the issue (max 120 chars)",
+      "explanation": "Detailed explanation of what is wrong and how to fix it (max 500 chars)"
+    }}}}
+  ],
+  "summary": "Overall review summary (max 1000 chars)",
+  "effort_score": 3,
+  "security_concerns": "Description of security issues, or empty string if none",
+  "tests_assessment": "Assessment of test coverage, or empty string if none"
+}}}}
+```
+
+- Order findings by severity (critical first, then warning, then info)
+- Maximum 50 findings
+- effort_score: integer 1-5 (1 = trivial change, 5 = complex/risky change)
+- Output ONLY the JSON object as your final response, no markdown fencing or extra text"""
+
     # ------------------------------------------------------------------
     # Adaptive complexity gate
     # ------------------------------------------------------------------
@@ -684,8 +764,8 @@ The complete PR diff is provided above — do not re-fetch it. Use the available
         lines = diff.splitlines()
         changed_lines = sum(
             1 for line in lines
-            if line.startswith("+") and not line.startswith("+++")
-            or line.startswith("-") and not line.startswith("---")
+            if (line.startswith("+") and not line.startswith("+++"))
+            or (line.startswith("-") and not line.startswith("---"))
         )
         file_count = sum(1 for line in lines if line.startswith("diff --git"))
         return changed_lines < 50 and file_count <= 2
@@ -695,9 +775,10 @@ The complete PR diff is provided above — do not re-fetch it. Use the available
     ) -> ReviewResult:
         """Run a single-turn review without tools for trivial diffs.
 
-        Calls the LLM once with no tool definitions, expecting a direct
-        JSON review output. Falls back to the standard agent loop if the
-        response is malformed.
+        Calls the LLM once with no tool definitions and a streamlined prompt,
+        expecting a direct JSON review output. On validation failure, retries
+        once with a correction message. If that also fails, emits a fallback
+        review (accepting reduced quality for trivial PRs).
 
         Args:
             pr_context: Metadata about the PR being reviewed.
@@ -707,7 +788,7 @@ The complete PR diff is provided above — do not re-fetch it. Use the available
         Returns:
             A ReviewResult containing the validated review and metrics.
         """
-        system_prompt = self._build_system_prompt(pr_context)
+        system_prompt = self._build_trivial_system_prompt(pr_context)
         user_message = self._build_user_message(pr_context, diff)
 
         messages: list[dict] = [
@@ -739,10 +820,29 @@ The complete PR diff is provided above — do not re-fetch it. Use the available
         # Validate the review output
         review_dict = self._validate_review(raw_content)
         if review_dict is None:
-            logger.warning("Trivial review produced invalid output, using fallback")
-            review_dict = review_to_dict(
-                build_fallback_review("Review output failed validation")
-            )
+            # Retry once with a correction message
+            logger.warning("Trivial review produced invalid output, retrying with correction")
+            messages.append({"role": "assistant", "content": raw_content})
+            messages.append({
+                "role": "user",
+                "content": "Your response was not valid JSON conforming to the Review Schema. "
+                "Please output ONLY the JSON object with no markdown fencing or extra text.",
+            })
+            try:
+                retry_response = self._call_llm(messages, tools=None)
+                if retry_response.usage:
+                    tokens_prompt += retry_response.usage.prompt_tokens
+                    tokens_completion += retry_response.usage.completion_tokens
+                retry_content = retry_response.choices[0].message.content or ""
+                review_dict = self._validate_review(retry_content)
+            except Exception:
+                pass
+
+            if review_dict is None:
+                logger.warning("Trivial review correction also failed, using fallback")
+                review_dict = review_to_dict(
+                    build_fallback_review("Review output failed validation")
+                )
 
         duration_ms = int((time.perf_counter() - start_time) * 1000)
         return ReviewResult(
