@@ -738,9 +738,9 @@ For each finding, provide:
 Output a single JSON object with this exact structure:
 
 ```json
-{{{{
+{{
   "findings": [
-    {{{{
+    {{
       "severity": "critical|warning|info",
       "category": "bug|security|performance|maintainability|style|documentation",
       "file_path": "path/to/file.py",
@@ -748,13 +748,13 @@ Output a single JSON object with this exact structure:
       "end_line": 45,
       "title": "Brief description of the issue (max 120 chars)",
       "explanation": "Detailed explanation of what is wrong and how to fix it (max 500 chars)"
-    }}}}
+    }}
   ],
   "summary": "Overall review summary (max 1000 chars)",
   "effort_score": 3,
   "security_concerns": "Description of security issues, or empty string if none",
   "tests_assessment": "Assessment of test coverage, or empty string if none"
-}}}}
+}}
 ```
 
 - Order findings by severity (critical first, then warning, then info)
