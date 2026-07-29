@@ -671,6 +671,24 @@ When you have completed your review, produce your final output as a single JSON 
 
 The complete PR diff is provided above — do not re-fetch it. Use the available tools to fetch additional context (file contents, related code, directory structure) needed to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
 
+    def _build_trivial_user_message(self, pr_context: PRContext, diff: str) -> str:
+        """Build user message for trivial diffs (no tool references)."""
+        return f"""Please review the following pull request.
+
+## Pull Request Details
+- URL: {pr_context.pr_url}
+- Title: {pr_context.title}
+- Author: {pr_context.author}
+- Branch: {pr_context.branch}
+
+## Diff
+
+```diff
+{diff}
+```
+
+The complete PR diff is above. Produce your review as a JSON object conforming to the Review Schema."""
+
     def _build_trivial_system_prompt(self, pr_context: PRContext) -> str:
         """Build a streamlined system prompt for trivial diffs (no tool references).
 
@@ -789,7 +807,7 @@ Output a single JSON object with this exact structure:
             A ReviewResult containing the validated review and metrics.
         """
         system_prompt = self._build_trivial_system_prompt(pr_context)
-        user_message = self._build_user_message(pr_context, diff)
+        user_message = self._build_trivial_user_message(pr_context, diff)
 
         messages: list[dict] = [
             {"role": "system", "content": system_prompt},
@@ -835,8 +853,8 @@ Output a single JSON object with this exact structure:
                     tokens_completion += retry_response.usage.completion_tokens
                 retry_content = retry_response.choices[0].message.content or ""
                 review_dict = self._validate_review(retry_content)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning("Trivial review correction call failed: %s", exc)
 
             if review_dict is None:
                 logger.warning("Trivial review correction also failed, using fallback")
