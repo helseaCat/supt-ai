@@ -119,6 +119,14 @@ class ReviewEngine:
         total_tokens_prompt = 0
         total_tokens_completion = 0
 
+        # --- Adaptive complexity gate: skip tools for trivial diffs ---
+        if self._is_trivial_diff(diff):
+            logger.info(
+                "Trivial diff detected (%d lines), skipping tool calls",
+                len(diff.splitlines()),
+            )
+            return self._run_trivial(pr_context, diff, start_time)
+
         # Build initial conversation
         system_prompt = self._build_system_prompt(pr_context)
         user_message = self._build_user_message(pr_context, diff)
@@ -655,6 +663,96 @@ When you have completed your review, produce your final output as a single JSON 
 ```
 
 The complete PR diff is provided above — do not re-fetch it. Use the available tools to fetch additional context (file contents, related code, directory structure) needed to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
+
+    # ------------------------------------------------------------------
+    # Adaptive complexity gate
+    # ------------------------------------------------------------------
+
+    def _is_trivial_diff(self, diff: str) -> bool:
+        """Determine if a diff is trivial enough to skip tool calls.
+
+        A diff is trivial if:
+        - It has fewer than 50 changed lines (additions + deletions)
+        - It touches 2 or fewer files
+
+        Args:
+            diff: The unified diff text.
+
+        Returns:
+            True if the diff is trivial and can be reviewed without tools.
+        """
+        lines = diff.splitlines()
+        changed_lines = sum(
+            1 for line in lines
+            if line.startswith("+") and not line.startswith("+++")
+            or line.startswith("-") and not line.startswith("---")
+        )
+        file_count = sum(1 for line in lines if line.startswith("diff --git"))
+        return changed_lines < 50 and file_count <= 2
+
+    def _run_trivial(
+        self, pr_context: PRContext, diff: str, start_time: float
+    ) -> ReviewResult:
+        """Run a single-turn review without tools for trivial diffs.
+
+        Calls the LLM once with no tool definitions, expecting a direct
+        JSON review output. Falls back to the standard agent loop if the
+        response is malformed.
+
+        Args:
+            pr_context: Metadata about the PR being reviewed.
+            diff: The unified diff text.
+            start_time: perf_counter timestamp when the review started.
+
+        Returns:
+            A ReviewResult containing the validated review and metrics.
+        """
+        system_prompt = self._build_system_prompt(pr_context)
+        user_message = self._build_user_message(pr_context, diff)
+
+        messages: list[dict] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+        try:
+            response = self._call_llm(messages, tools=None)
+        except Exception as exc:
+            logger.error("Trivial review LLM call failed: %s", exc)
+            review_dict = review_to_dict(build_fallback_review(f"Review failed: {exc}"))
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            return ReviewResult(
+                review=review_dict,
+                iterations=1,
+                tool_calls=0,
+                tokens_prompt=0,
+                tokens_completion=0,
+                duration_ms=duration_ms,
+            )
+
+        tokens_prompt = response.usage.prompt_tokens if response.usage else 0
+        tokens_completion = response.usage.completion_tokens if response.usage else 0
+
+        choice = response.choices[0]
+        raw_content = choice.message.content or ""
+
+        # Validate the review output
+        review_dict = self._validate_review(raw_content)
+        if review_dict is None:
+            logger.warning("Trivial review produced invalid output, using fallback")
+            review_dict = review_to_dict(
+                build_fallback_review("Review output failed validation")
+            )
+
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        return ReviewResult(
+            review=review_dict,
+            iterations=1,
+            tool_calls=0,
+            tokens_prompt=tokens_prompt,
+            tokens_completion=tokens_completion,
+            duration_ms=duration_ms,
+        )
 
     # ------------------------------------------------------------------
     # Iteration budget computation
