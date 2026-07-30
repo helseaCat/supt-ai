@@ -814,6 +814,16 @@ Output a single JSON object with this exact structure:
             {"role": "user", "content": user_message},
         ]
 
+        # --- Timeout check before LLM call ---
+        if self._remaining_time_ms() < 10_000:
+            logger.warning("Timeout approaching before trivial review, emitting fallback")
+            review_dict = review_to_dict(build_fallback_review("Insufficient time for review"))
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            return ReviewResult(
+                review=review_dict, iterations=0, tool_calls=0,
+                tokens_prompt=0, tokens_completion=0, duration_ms=duration_ms,
+            )
+
         try:
             response = self._call_llm(messages, tools=None)
         except Exception as exc:
@@ -837,35 +847,43 @@ Output a single JSON object with this exact structure:
 
         # Validate the review output
         review_dict = self._validate_review(raw_content)
+        iterations = 1
         if review_dict is None:
-            # Retry once with a correction message
-            logger.warning("Trivial review produced invalid output, retrying with correction")
-            messages.append({"role": "assistant", "content": raw_content})
-            messages.append({
-                "role": "user",
-                "content": "Your response was not valid JSON conforming to the Review Schema. "
-                "Please output ONLY the JSON object with no markdown fencing or extra text.",
-            })
-            try:
-                retry_response = self._call_llm(messages, tools=None)
-                if retry_response.usage:
-                    tokens_prompt += retry_response.usage.prompt_tokens
-                    tokens_completion += retry_response.usage.completion_tokens
-                retry_content = retry_response.choices[0].message.content or ""
-                review_dict = self._validate_review(retry_content)
-            except Exception as exc:
-                logger.warning("Trivial review correction call failed: %s", exc)
-
-            if review_dict is None:
-                logger.warning("Trivial review correction also failed, using fallback")
+            # Retry once with a correction message (if time permits)
+            if self._remaining_time_ms() < 10_000:
+                logger.warning("Timeout approaching, skipping trivial correction turn")
                 review_dict = review_to_dict(
-                    build_fallback_review("Review output failed validation")
+                    build_fallback_review("Review output failed validation (no time for retry)")
                 )
+            else:
+                logger.warning("Trivial review produced invalid output, retrying with correction")
+                iterations = 2
+                messages.append({"role": "assistant", "content": raw_content})
+                messages.append({
+                    "role": "user",
+                    "content": "Your response was not valid JSON conforming to the Review Schema. "
+                    "Please output ONLY the JSON object with no markdown fencing or extra text.",
+                })
+                try:
+                    retry_response = self._call_llm(messages, tools=None)
+                    if retry_response.usage:
+                        tokens_prompt += retry_response.usage.prompt_tokens
+                        tokens_completion += retry_response.usage.completion_tokens
+                    retry_content = retry_response.choices[0].message.content or ""
+                    review_dict = self._validate_review(retry_content)
+                except Exception as exc:
+                    logger.warning("Trivial review correction call failed: %s", exc)
+
+                if review_dict is None:
+                    logger.warning("Trivial review correction also failed, using fallback")
+                    review_dict = review_to_dict(
+                        build_fallback_review("Review output failed validation")
+                    )
 
         duration_ms = int((time.perf_counter() - start_time) * 1000)
         return ReviewResult(
             review=review_dict,
-            iterations=1,
+            iterations=iterations,
             tool_calls=0,
             tokens_prompt=tokens_prompt,
             tokens_completion=tokens_completion,
