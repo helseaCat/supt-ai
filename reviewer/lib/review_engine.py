@@ -119,6 +119,21 @@ class ReviewEngine:
         total_tokens_prompt = 0
         total_tokens_completion = 0
 
+        # --- Adaptive complexity gate: skip tools for trivial diffs ---
+        if self._is_trivial_diff(diff):
+            lines = diff.splitlines()
+            changed = sum(
+                1 for l in lines
+                if (l.startswith("+") and not l.startswith("+++"))
+                or (l.startswith("-") and not l.startswith("---"))
+            )
+            files = sum(1 for l in lines if l.startswith("diff --git"))
+            logger.info(
+                "Trivial diff detected (%d changed lines, %d files), skipping tool calls",
+                changed, files,
+            )
+            return self._run_trivial(pr_context, diff, start_time)
+
         # Build initial conversation
         system_prompt = self._build_system_prompt(pr_context)
         user_message = self._build_user_message(pr_context, diff)
@@ -655,6 +670,225 @@ When you have completed your review, produce your final output as a single JSON 
 ```
 
 The complete PR diff is provided above — do not re-fetch it. Use the available tools to fetch additional context (file contents, related code, directory structure) needed to verify your findings. When done, produce your final review as a JSON object conforming to the Review Schema."""
+
+    def _build_trivial_user_message(self, pr_context: PRContext, diff: str) -> str:
+        """Build user message for trivial diffs (no tool references)."""
+        return f"""Please review the following pull request.
+
+## Pull Request Details
+- URL: {pr_context.pr_url}
+- Title: {pr_context.title}
+- Author: {pr_context.author}
+- Branch: {pr_context.branch}
+
+## Diff
+
+```diff
+{diff}
+```
+
+The complete PR diff is above. Produce your review as a JSON object conforming to the Review Schema."""
+
+    def _build_trivial_system_prompt(self, pr_context: PRContext) -> str:
+        """Build a streamlined system prompt for trivial diffs (no tool references).
+
+        This prompt omits all tool-usage instructions since trivial reviews
+        are single-turn with no tools available.
+        """
+        return f"""You are an expert code reviewer analyzing a small pull request.
+
+## Repository Context
+- Repository: {pr_context.owner}/{pr_context.repo}
+- PR #{pr_context.pr_number}: {pr_context.title}
+- Author: {pr_context.author}
+- Branch: {pr_context.branch}
+
+## Instructions
+
+The complete PR diff is provided in the user message. This is a small change — review it directly from the diff without needing additional context.
+
+### No Hedging
+NEVER use hedging language. The following phrases are BANNED:
+- "it appears that", "if this is", "it seems like", "this might be", "possibly", "probably", "I think"
+
+If you cannot confidently identify an issue from the diff alone, OMIT the finding entirely.
+
+### Finding Categories
+Categorize each finding as one of:
+- bug: Functional defects, logic errors, incorrect behavior
+- security: Vulnerabilities, unsafe patterns, missing validation
+- performance: Inefficiencies, unnecessary allocations
+- maintainability: Code complexity, poor naming, missing abstractions
+- style: Formatting, naming conventions, consistency issues
+- documentation: Missing or incorrect comments, docstrings, READMEs
+
+### Finding Details
+For each finding, provide:
+- The specific file path and line range (start_line and end_line)
+- A concise title (max 120 characters)
+- A clear explanation (max 500 characters) of what is wrong and why
+- A concrete suggestion or fix
+
+### Severity Levels
+- critical: Bugs that cause incorrect behavior, security vulnerabilities, data loss risks
+- warning: Issues that degrade quality but don't break functionality
+- info: Style issues, minor suggestions, documentation improvements
+
+### Output Format
+Output a single JSON object with this exact structure:
+
+```json
+{{
+  "findings": [
+    {{
+      "severity": "critical|warning|info",
+      "category": "bug|security|performance|maintainability|style|documentation",
+      "file_path": "path/to/file.py",
+      "start_line": 42,
+      "end_line": 45,
+      "title": "Brief description of the issue (max 120 chars)",
+      "explanation": "Detailed explanation of what is wrong and how to fix it (max 500 chars)"
+    }}
+  ],
+  "summary": "Overall review summary (max 1000 chars)",
+  "effort_score": 3,
+  "security_concerns": "Description of security issues, or empty string if none",
+  "tests_assessment": "Assessment of test coverage, or empty string if none"
+}}
+```
+
+- Order findings by severity (critical first, then warning, then info)
+- Maximum 50 findings
+- effort_score: integer 1-5 (1 = trivial change, 5 = complex/risky change)
+- Output ONLY the JSON object as your final response, no markdown fencing or extra text"""
+
+    # ------------------------------------------------------------------
+    # Adaptive complexity gate
+    # ------------------------------------------------------------------
+
+    def _is_trivial_diff(self, diff: str) -> bool:
+        """Determine if a diff is trivial enough to skip tool calls.
+
+        A diff is trivial if:
+        - It has fewer than 50 changed lines (additions + deletions)
+        - It touches 2 or fewer files
+
+        Args:
+            diff: The unified diff text.
+
+        Returns:
+            True if the diff is trivial and can be reviewed without tools.
+        """
+        lines = diff.splitlines()
+        changed_lines = sum(
+            1 for line in lines
+            if (line.startswith("+") and not line.startswith("+++"))
+            or (line.startswith("-") and not line.startswith("---"))
+        )
+        file_count = sum(1 for line in lines if line.startswith("diff --git"))
+        return changed_lines < 50 and file_count <= 2
+
+    def _run_trivial(
+        self, pr_context: PRContext, diff: str, start_time: float
+    ) -> ReviewResult:
+        """Run a single-turn review without tools for trivial diffs.
+
+        Calls the LLM once with no tool definitions and a streamlined prompt,
+        expecting a direct JSON review output. On validation failure, retries
+        once with a correction message. If that also fails, emits a fallback
+        review (accepting reduced quality for trivial PRs).
+
+        Args:
+            pr_context: Metadata about the PR being reviewed.
+            diff: The unified diff text.
+            start_time: perf_counter timestamp when the review started.
+
+        Returns:
+            A ReviewResult containing the validated review and metrics.
+        """
+        system_prompt = self._build_trivial_system_prompt(pr_context)
+        user_message = self._build_trivial_user_message(pr_context, diff)
+
+        messages: list[dict] = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_message},
+        ]
+
+        # --- Timeout check before LLM call ---
+        if self._remaining_time_ms() < 10_000:
+            logger.warning("Timeout approaching before trivial review, emitting fallback")
+            review_dict = review_to_dict(build_fallback_review("Insufficient time for review"))
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            return ReviewResult(
+                review=review_dict, iterations=0, tool_calls=0,
+                tokens_prompt=0, tokens_completion=0, duration_ms=duration_ms,
+            )
+
+        try:
+            response = self._call_llm(messages, tools=None)
+        except Exception as exc:
+            logger.error("Trivial review LLM call failed: %s", exc)
+            review_dict = review_to_dict(build_fallback_review(f"Review failed: {exc}"))
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+            return ReviewResult(
+                review=review_dict,
+                iterations=1,
+                tool_calls=0,
+                tokens_prompt=0,
+                tokens_completion=0,
+                duration_ms=duration_ms,
+            )
+
+        tokens_prompt = response.usage.prompt_tokens if response.usage else 0
+        tokens_completion = response.usage.completion_tokens if response.usage else 0
+
+        choice = response.choices[0]
+        raw_content = choice.message.content or ""
+
+        # Validate the review output
+        review_dict = self._validate_review(raw_content)
+        iterations = 1
+        if review_dict is None:
+            # Retry once with a correction message (if time permits)
+            if self._remaining_time_ms() < 10_000:
+                logger.warning("Timeout approaching, skipping trivial correction turn")
+                review_dict = review_to_dict(
+                    build_fallback_review("Review output failed validation (no time for retry)")
+                )
+            else:
+                logger.warning("Trivial review produced invalid output, retrying with correction")
+                iterations = 2
+                messages.append({"role": "assistant", "content": raw_content})
+                messages.append({
+                    "role": "user",
+                    "content": "Your response was not valid JSON conforming to the Review Schema. "
+                    "Please output ONLY the JSON object with no markdown fencing or extra text.",
+                })
+                try:
+                    retry_response = self._call_llm(messages, tools=None)
+                    if retry_response.usage:
+                        tokens_prompt += retry_response.usage.prompt_tokens
+                        tokens_completion += retry_response.usage.completion_tokens
+                    retry_content = retry_response.choices[0].message.content or ""
+                    review_dict = self._validate_review(retry_content)
+                except Exception as exc:
+                    logger.warning("Trivial review correction call failed: %s", exc)
+
+                if review_dict is None:
+                    logger.warning("Trivial review correction also failed, using fallback")
+                    review_dict = review_to_dict(
+                        build_fallback_review("Review output failed validation")
+                    )
+
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+        return ReviewResult(
+            review=review_dict,
+            iterations=iterations,
+            tool_calls=0,
+            tokens_prompt=tokens_prompt,
+            tokens_completion=tokens_completion,
+            duration_ms=duration_ms,
+        )
 
     # ------------------------------------------------------------------
     # Iteration budget computation
