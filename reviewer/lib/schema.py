@@ -214,7 +214,7 @@ def _extract_json_object(text: str) -> dict | None:
     Handles cases where the LLM prepends free text before the JSON, or wraps
     it in markdown code fences.
     """
-    if not text:
+    if not isinstance(text, str) or not text:
         return None
 
     # Strip markdown code fences if present
