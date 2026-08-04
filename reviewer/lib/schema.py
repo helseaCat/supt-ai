@@ -71,7 +71,10 @@ def validate_review(raw_json: str) -> ReviewSchema | None:
     try:
         data = json.loads(raw_json)
     except (json.JSONDecodeError, TypeError):
-        return None
+        # Try to extract JSON from mixed text+JSON response
+        data = _extract_json_object(raw_json)
+        if data is None:
+            return None
 
     if not isinstance(data, dict):
         return None
@@ -203,3 +206,42 @@ def _clamp_effort_score(value) -> int:
     except (TypeError, ValueError):
         return 3  # default if not convertible
     return max(1, min(5, score))
+
+
+def _extract_json_object(text: str) -> dict | None:
+    """Try to extract a JSON object from text that may have leading/trailing content.
+
+    Handles cases where the LLM prepends free text before the JSON, or wraps
+    it in markdown code fences.
+    """
+    if not isinstance(text, str) or not text:
+        return None
+
+    # Strip markdown code fences if present
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        # Remove opening fence (```json or ```)
+        first_newline = stripped.find("\n")
+        if first_newline != -1:
+            stripped = stripped[first_newline + 1:]
+        # Remove closing fence
+        if stripped.rstrip().endswith("```"):
+            stripped = stripped.rstrip()[:-3].rstrip()
+        try:
+            data = json.loads(stripped)
+            return data if isinstance(data, dict) else None
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    # Find the first { and last } — extract the outermost JSON object
+    first_brace = text.find("{")
+    last_brace = text.rfind("}")
+    if first_brace == -1 or last_brace == -1 or last_brace <= first_brace:
+        return None
+
+    candidate = text[first_brace:last_brace + 1]
+    try:
+        data = json.loads(candidate)
+        return data if isinstance(data, dict) else None
+    except (json.JSONDecodeError, TypeError):
+        return None
