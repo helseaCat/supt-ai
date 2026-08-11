@@ -21,6 +21,10 @@ logger = logging.getLogger(__name__)
 MAX_CONTENT_LENGTH = 100_000
 _TRUNCATION_INDICATOR = "\n\n[Content truncated — exceeded 100,000 character limit]"
 
+# Line-based truncation for get_file_contents to reduce token waste.
+# Files over this limit are truncated with a hint to use get_file_at_line.
+MAX_FILE_LINES = 200
+
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -256,6 +260,16 @@ class ToolRegistry:
             return ToolResult(
                 content=f"Error fetching file '{path}': {type(exc).__name__}: {exc}",
                 is_error=True,
+            )
+
+        # Truncate large files to encourage narrow get_file_at_line usage
+        lines = content.splitlines()
+        if len(lines) > MAX_FILE_LINES:
+            truncated = "\n".join(lines[:MAX_FILE_LINES])
+            return ToolResult(
+                content=f"{truncated}\n\n"
+                f"[Truncated at {MAX_FILE_LINES} lines ({len(lines)} total). "
+                f"Use get_file_at_line with start_line/end_line to fetch specific sections.]"
             )
 
         return ToolResult(content=_truncate(content))
