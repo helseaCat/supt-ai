@@ -266,11 +266,11 @@ class ToolRegistry:
         lines = content.splitlines()
         if len(lines) > MAX_FILE_LINES:
             truncated = "\n".join(lines[:MAX_FILE_LINES])
-            return ToolResult(
-                content=f"{truncated}\n\n"
-                f"[Truncated at {MAX_FILE_LINES} lines ({len(lines)} total). "
+            truncated += (
+                f"\n\n[Truncated at {MAX_FILE_LINES} lines ({len(lines)} total). "
                 f"Use get_file_at_line with start_line/end_line to fetch specific sections.]"
             )
+            return ToolResult(content=_truncate(truncated))
 
         return ToolResult(content=_truncate(content))
 
